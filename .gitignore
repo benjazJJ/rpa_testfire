@@ -1,0 +1,8 @@
+config/credenciales.json
+__pycache__/
+*.pyc
+logs/*
+evidencias/*
+data/salida/*
+config/oauth_drive.json
+config/token_drive.json
