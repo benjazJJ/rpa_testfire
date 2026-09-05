@@ -8,7 +8,6 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
@@ -28,9 +27,7 @@ class GoogleDriveEvidencias:
         ruta_config = self.raiz_proyecto / "config" / "config.json"
 
         if not ruta_config.exists():
-            raise FileNotFoundError(
-                f"No se encontró config.json en: {ruta_config}"
-            )
+            raise FileNotFoundError(f"No se encontró config.json en: {ruta_config}")
 
         with open(ruta_config, "r", encoding="utf-8") as archivo:
             return json.load(archivo)
@@ -38,20 +35,12 @@ class GoogleDriveEvidencias:
     def _obtener_credenciales(self):
         configuracion_google = self.configuracion["google"]
 
-        ruta_oauth = (
-            self.raiz_proyecto
-            / configuracion_google["oauth_drive_path"]
-        )
+        ruta_oauth = self.raiz_proyecto / configuracion_google["oauth_drive_path"]
 
-        ruta_token = (
-            self.raiz_proyecto
-            / configuracion_google["token_drive_path"]
-        )
+        ruta_token = self.raiz_proyecto / configuracion_google["token_drive_path"]
 
         if not ruta_oauth.exists():
-            raise FileNotFoundError(
-                f"No se encontró oauth_drive.json en: {ruta_oauth}"
-            )
+            raise FileNotFoundError(f"No se encontró oauth_drive.json en: {ruta_oauth}")
 
         credenciales = None
 
@@ -63,11 +52,7 @@ class GoogleDriveEvidencias:
 
         if not credenciales or not credenciales.valid:
 
-            if (
-                credenciales
-                and credenciales.expired
-                and credenciales.refresh_token
-            ):
+            if credenciales and credenciales.expired and credenciales.refresh_token:
                 credenciales.refresh(Request())
 
             else:
@@ -110,9 +95,7 @@ class GoogleDriveEvidencias:
         )
 
         if carpeta["mimeType"] != TIPO_CARPETA_DRIVE:
-            raise ValueError(
-                "El ID configurado no corresponde a una carpeta."
-            )
+            raise ValueError("El ID configurado no corresponde a una carpeta.")
 
         print("[OK] Conexión con Google Drive exitosa.")
         print(f"[OK] Carpeta encontrada: {carpeta['name']}")
@@ -121,9 +104,7 @@ class GoogleDriveEvidencias:
         ruta_archivo = Path(ruta_archivo)
 
         if not ruta_archivo.exists():
-            raise FileNotFoundError(
-                f"No se encontró el archivo: {ruta_archivo}"
-            )
+            raise FileNotFoundError(f"No se encontró el archivo: {ruta_archivo}")
 
         if nombre_drive is None:
             nombre_drive = ruta_archivo.name

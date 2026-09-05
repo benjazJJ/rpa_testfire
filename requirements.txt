@@ -5,4 +5,5 @@ google-api-python-client
 openpyxl
 requests
 pytest
+black
 google-auth-oauthlib

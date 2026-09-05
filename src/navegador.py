@@ -71,17 +71,11 @@ class NavegadorTestFire:
         utilizarse internamente dentro de la clase.
         """
 
-        ruta_config = (
-            self.raiz_proyecto
-            / "config"
-            / "config.json"
-        )
+        ruta_config = self.raiz_proyecto / "config" / "config.json"
 
         # Validamos la existencia del archivo antes de abrirlo.
         if not ruta_config.exists():
-            raise FileNotFoundError(
-                f"No se encontró config.json en: {ruta_config}"
-            )
+            raise FileNotFoundError(f"No se encontró config.json en: {ruta_config}")
 
         # encoding="utf-8" permite leer correctamente tildes y ñ.
         with open(ruta_config, "r", encoding="utf-8") as archivo:
@@ -110,9 +104,7 @@ class NavegadorTestFire:
 
         # Path transforma la ruta escrita en config.json en una ruta
         # que Python puede comprobar y utilizar.
-        ruta_geckodriver = Path(
-            configuracion_testfire["geckodriver_path"]
-        )
+        ruta_geckodriver = Path(configuracion_testfire["geckodriver_path"])
 
         if not ruta_geckodriver.exists():
             raise FileNotFoundError(
@@ -165,9 +157,7 @@ class NavegadorTestFire:
 
         # Evita intentar navegar sin haber ejecutado iniciar().
         if self.driver is None:
-            raise RuntimeError(
-                "El navegador todavía no ha sido iniciado."
-            )
+            raise RuntimeError("El navegador todavía no ha sido iniciado.")
 
         configuracion_testfire = self.configuracion["testfire"]
 
@@ -183,19 +173,14 @@ class NavegadorTestFire:
         # Selenium esperará como máximo `timeout` segundos hasta encontrar
         # el elemento <body> de la página.
         WebDriverWait(self.driver, timeout).until(
-            EC.presence_of_element_located(
-                (By.TAG_NAME, "body")
-            )
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
 
         # Obtenemos el texto de la pestaña del navegador.
         titulo = self.driver.title.strip()
 
         # Obtenemos la carpeta de evidencias desde config.json.
-        ruta_evidencias = (
-            self.raiz_proyecto
-            / self.configuracion["rutas"]["evidencias"]
-        )
+        ruta_evidencias = self.raiz_proyecto / self.configuracion["rutas"]["evidencias"]
 
         # Si la carpeta no existe, se crea automáticamente.
         ruta_evidencias.mkdir(
@@ -204,31 +189,21 @@ class NavegadorTestFire:
         )
 
         # El ID evita que una captura sobrescriba a otra.
-        ruta_captura = (
-            ruta_evidencias
-            / f"{id_ejecucion}_inicio_testfire.png"
-        )
+        ruta_captura = ruta_evidencias / f"{id_ejecucion}_inicio_testfire.png"
 
         # save_screenshot devuelve True si la captura se guardó.
-        captura_correcta = self.driver.save_screenshot(
-            str(ruta_captura)
-        )
+        captura_correcta = self.driver.save_screenshot(str(ruta_captura))
 
         if not captura_correcta:
-            raise RuntimeError(
-                "Firefox no pudo guardar la captura."
-            )
+            raise RuntimeError("Firefox no pudo guardar la captura.")
 
         print(f"[SELENIUM] Página cargada: {titulo}")
-        print(
-            f"[EVIDENCIA] Captura guardada: "
-            f"{ruta_captura.name}"
-        )
+        print(f"[EVIDENCIA] Captura guardada: " f"{ruta_captura.name}")
 
         # Devolvemos dos resultados:
         # la ubicación de la captura y el título de la página.
         return ruta_captura, titulo
-    
+
     def capturar_evidencia(self, id_ejecucion, nombre_paso):
         """
         Guarda una captura de la página actualmente visible.
@@ -255,15 +230,10 @@ class NavegadorTestFire:
 
         # No podemos capturar si Selenium todavía no creó Firefox.
         if self.driver is None:
-            raise RuntimeError(
-                "No se puede capturar porque Firefox no está iniciado."
-            )
+            raise RuntimeError("No se puede capturar porque Firefox no está iniciado.")
 
         # Obtenemos la carpeta de evidencias desde config.json.
-        ruta_evidencias = (
-            self.raiz_proyecto
-            / self.configuracion["rutas"]["evidencias"]
-        )
+        ruta_evidencias = self.raiz_proyecto / self.configuracion["rutas"]["evidencias"]
 
         # Crea la carpeta solamente si todavía no existe.
         # exist_ok=True evita duplicarla o generar un error.
@@ -273,29 +243,18 @@ class NavegadorTestFire:
         )
 
         # El ID de ejecución evita sobrescribir capturas anteriores.
-        ruta_captura = (
-            ruta_evidencias
-            / f"{id_ejecucion}_{nombre_paso}.png"
-        )
+        ruta_captura = ruta_evidencias / f"{id_ejecucion}_{nombre_paso}.png"
 
         # Selenium captura exactamente lo que muestra Firefox.
-        captura_correcta = self.driver.save_screenshot(
-            str(ruta_captura)
-        )
+        captura_correcta = self.driver.save_screenshot(str(ruta_captura))
 
         # save_screenshot devuelve False si no pudo crear la imagen.
         if not captura_correcta:
-            raise RuntimeError(
-                f"No se pudo guardar la captura: {nombre_paso}"
-            )
+            raise RuntimeError(f"No se pudo guardar la captura: {nombre_paso}")
 
-        print(
-            f"[EVIDENCIA] Captura guardada: "
-            f"{ruta_captura.name}"
-        )
+        print(f"[EVIDENCIA] Captura guardada: " f"{ruta_captura.name}")
 
         return ruta_captura
-    
 
     def cerrar(self):
         """

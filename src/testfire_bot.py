@@ -1,0 +1,518 @@
+"""
+Automatización de las operaciones realizadas en Demo TestFire.
+
+Esta clase contiene las acciones específicas del sitio Altoro Mutual.
+La apertura y cierre de Firefox continúan siendo responsabilidad de la
+clase NavegadorTestFire.
+"""
+
+from pathlib import Path
+
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+
+class TestFireBot:
+    """
+    Robot encargado de interactuar con Demo TestFire.
+
+    La clase recibe una instancia de NavegadorTestFire para reutilizar:
+
+    - El controlador de Selenium.
+    - La captura de evidencias.
+    - La misma sesión de Firefox durante toda la ejecución.
+    """
+
+    def __init__(self, navegador, tiempo_espera: int = 15):
+        """
+        Inicializa el robot de Demo TestFire.
+
+        Args:
+            navegador:
+                Instancia de NavegadorTestFire que contiene el driver
+                de Selenium.
+
+            tiempo_espera:
+                Cantidad máxima de segundos que Selenium esperará por
+                los elementos o resultados de la página.
+        """
+
+        self.navegador = navegador
+        self.driver = navegador.driver
+        self.tiempo_espera = tiempo_espera
+
+        # WebDriverWait permite esperar condiciones reales de la página,
+        # evitando depender de pausas fijas como time.sleep().
+        self.espera = WebDriverWait(
+            self.driver,
+            self.tiempo_espera,
+        )
+
+    def _login_exitoso(self) -> bool:
+        """
+        Comprueba si TestFire realmente inició una sesión.
+
+        No se utiliza solamente la existencia de AccountLink porque ese
+        elemento puede aparecer incluso cuando el usuario no ha iniciado
+        sesión.
+
+        El login se considera exitoso cuando se encuentra al menos una
+        de las siguientes señales:
+
+        1. La URL corresponde al módulo bancario principal.
+        2. Aparece el enlace "Sign Off".
+        3. Aparece el encabezado "Account Summary".
+
+        Returns:
+            bool:
+                True si se detectó una sesión autenticada.
+                False si no existen señales suficientes.
+        """
+
+        # Convertimos la URL a minúsculas para compararla sin depender
+        # del uso de letras mayúsculas o minúsculas.
+        url_actual = self.driver.current_url.lower()
+
+        # Después de un login exitoso, TestFire normalmente redirige
+        # al usuario hacia esta página.
+        if "/bank/main.jsp" in url_actual:
+            return True
+
+        # LoginLink cambia su texto desde "Sign In" a "Sign Off"
+        # únicamente cuando existe una sesión autenticada.
+        enlaces_cerrar_sesion = self.driver.find_elements(
+            By.XPATH,
+            (
+                "//a[@id='LoginLink' and contains("
+                "translate(normalize-space(.), "
+                "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+                "'abcdefghijklmnopqrstuvwxyz'), "
+                "'sign off')]"
+            ),
+        )
+
+        for enlace in enlaces_cerrar_sesion:
+            if enlace.is_displayed():
+                return True
+
+        # También comprobamos la aparición del encabezado de resumen
+        # de cuentas, característico de la página posterior al login.
+        encabezados_cuenta = self.driver.find_elements(
+            By.XPATH,
+            (
+                "//*[self::h1 or self::h2 or self::h3]"
+                "[contains("
+                "translate(normalize-space(.), "
+                "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+                "'abcdefghijklmnopqrstuvwxyz'), "
+                "'account summary')]"
+            ),
+        )
+
+        for encabezado in encabezados_cuenta:
+            if encabezado.is_displayed():
+                return True
+
+        return False
+
+    def _obtener_error_login(self) -> str:
+        """
+        Obtiene el mensaje de rechazo mostrado por TestFire.
+
+        Se buscan mensajes que contengan las expresiones utilizadas
+        por el sitio cuando las credenciales son incorrectas.
+
+        Si varios elementos contienen el mensaje, se selecciona el texto
+        más corto. Esto evita devolver accidentalmente todo el contenido
+        visible de la página.
+
+        Returns:
+            str:
+                Mensaje de error encontrado.
+
+                Retorna una cadena vacía cuando no existe un mensaje
+                visible de rechazo.
+        """
+
+        elementos_error = self.driver.find_elements(
+            By.XPATH,
+            (
+                "//*[contains("
+                "translate(normalize-space(.), "
+                "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+                "'abcdefghijklmnopqrstuvwxyz'), "
+                "'login failed') "
+                "or contains("
+                "translate(normalize-space(.), "
+                "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+                "'abcdefghijklmnopqrstuvwxyz'), "
+                "'username or password was not found')]"
+            ),
+        )
+
+        mensajes_visibles = []
+
+        for elemento in elementos_error:
+            if not elemento.is_displayed():
+                continue
+
+            # Eliminamos saltos de línea y espacios repetidos para
+            # almacenar un detalle limpio en Google Sheets.
+            mensaje = " ".join(elemento.text.split())
+
+            if mensaje:
+                mensajes_visibles.append(mensaje)
+
+        if not mensajes_visibles:
+            return ""
+
+        # Los elementos padres también pueden contener el mensaje junto
+        # al resto de la página. El texto más corto suele corresponder
+        # exactamente al mensaje de error.
+        mensaje_error = min(
+            mensajes_visibles,
+            key=len,
+        )
+
+        # Limitamos el largo para no ingresar textos excesivos
+        # en la auditoría de Google Sheets.
+        return mensaje_error[:500]
+
+    def _esperar_resultado_login(self) -> None:
+        """
+        Espera hasta que TestFire informe el resultado del login.
+
+        La condición termina cuando aparece:
+
+        - Un mensaje de credenciales rechazadas; o
+        - Una señal comprobable de sesión iniciada.
+
+        Raises:
+            TimeoutException:
+                Cuando TestFire no entrega un resultado reconocible
+                dentro del tiempo configurado.
+        """
+
+        self.espera.until(
+            lambda driver: (
+                bool(self._obtener_error_login())
+                or self._login_exitoso()
+            )
+        )
+
+    def iniciar_sesion(
+        self,
+        usuario: str,
+        contrasena: str,
+        id_ejecucion: str,
+    ) -> tuple[bool, Path, str]:
+        """
+        Inicia sesión en Demo TestFire y genera una evidencia.
+
+        El método realiza las siguientes acciones:
+
+        1. Abre el formulario de inicio de sesión.
+        2. Ingresa el usuario y la contraseña.
+        3. Presiona el botón Login.
+        4. Espera la respuesta del sitio.
+        5. Comprueba primero si existe un mensaje de error.
+        6. Captura una evidencia del resultado.
+
+        Args:
+            usuario:
+                Nombre de usuario ingresado desde la consola.
+
+            contrasena:
+                Contraseña ingresada desde la consola.
+
+            id_ejecucion:
+                Identificador único de la ejecución actual del RPA.
+
+        Returns:
+            tuple[bool, Path, str]:
+                Una tupla que contiene:
+
+                - True o False según el resultado.
+                - Ruta local de la captura de pantalla.
+                - Descripción del resultado.
+
+        Raises:
+            ValueError:
+                Cuando el usuario o la contraseña están vacíos.
+        """
+
+        # No permitimos enviar un formulario sin usuario.
+        if not usuario.strip():
+            raise ValueError(
+                "El nombre de usuario no puede estar vacío."
+            )
+
+        # No mostramos ni incluimos la contraseña en mensajes,
+        # capturas, logs o Google Sheets.
+        if not contrasena:
+            raise ValueError(
+                "La contraseña no puede estar vacía."
+            )
+
+        print("[TESTFIRE] Abriendo formulario de inicio de sesión...")
+
+        # Comprobamos si el formulario ya está visible. Esto permite
+        # reutilizar el método aunque el navegador ya esté en login.jsp.
+        campos_usuario_visibles = self.driver.find_elements(
+            By.ID,
+            "uid",
+        )
+
+        formulario_visible = any(
+            campo.is_displayed()
+            for campo in campos_usuario_visibles
+        )
+
+        if not formulario_visible:
+            # Esperamos hasta que el enlace Sign In pueda presionarse.
+            enlace_login = self.espera.until(
+                EC.element_to_be_clickable(
+                    (By.ID, "LoginLink")
+                )
+            )
+
+            enlace_login.click()
+
+        # Esperamos que el campo de usuario esté visible.
+        campo_usuario = self.espera.until(
+            EC.visibility_of_element_located(
+                (By.ID, "uid")
+            )
+        )
+
+        # Esperamos que el campo de contraseña esté visible.
+        campo_contrasena = self.espera.until(
+            EC.visibility_of_element_located(
+                (By.ID, "passw")
+            )
+        )
+
+        # Limpiamos ambos campos para evitar valores anteriores.
+        campo_usuario.clear()
+        campo_contrasena.clear()
+
+        print("[TESTFIRE] Ingresando credenciales...")
+
+        campo_usuario.send_keys(usuario)
+        campo_contrasena.send_keys(contrasena)
+
+        # Localizamos el botón Login mediante su atributo name.
+        boton_login = self.espera.until(
+            EC.element_to_be_clickable(
+                (By.NAME, "btnSubmit")
+            )
+        )
+
+        print("[TESTFIRE] Enviando formulario...")
+        boton_login.click()
+
+        try:
+            # Esperamos hasta detectar éxito o rechazo.
+            self._esperar_resultado_login()
+
+        except TimeoutException:
+            # Si la página no entrega un resultado reconocible,
+            # igualmente dejamos evidencia para investigar el problema.
+            detalle = (
+                "Tiempo de espera agotado: no fue posible determinar "
+                "el resultado del inicio de sesión."
+            )
+
+            print(f"[TESTFIRE] {detalle}")
+
+            ruta_captura = self.navegador.capturar_evidencia(
+                id_ejecucion,
+                "login_sin_resultado",
+            )
+
+            return False, ruta_captura, detalle
+
+        # IMPORTANTE:
+        # El error se revisa antes que el éxito. Un mensaje visible de
+        # rechazo siempre tiene prioridad sobre cualquier otro elemento.
+        mensaje_error = self._obtener_error_login()
+
+        if mensaje_error:
+            print(
+                f"[TESTFIRE] Login rechazado: {mensaje_error}"
+            )
+
+            ruta_captura = self.navegador.capturar_evidencia(
+                id_ejecucion,
+                "login_fallido",
+            )
+
+            return False, ruta_captura, mensaje_error
+
+        # Solo informamos éxito si no existe un mensaje de rechazo y
+        # además encontramos una señal real de sesión autenticada.
+        if self._login_exitoso():
+            detalle = "Inicio de sesión realizado correctamente."
+
+            print("[TESTFIRE] Login exitoso.")
+
+            ruta_captura = self.navegador.capturar_evidencia(
+                id_ejecucion,
+                "login_exitoso",
+            )
+
+            return True, ruta_captura, detalle
+
+        # Esta condición es poco probable, pero evita registrar un éxito
+        # cuando la página presenta un resultado desconocido.
+        detalle = (
+            "TestFire respondió, pero el resultado del inicio "
+            "de sesión no pudo determinarse."
+        )
+
+        print(f"[TESTFIRE] {detalle}")
+
+        ruta_captura = self.navegador.capturar_evidencia(
+            id_ejecucion,
+            "login_indeterminado",
+        )
+
+        return False, ruta_captura, detalle
+
+    def abrir_actividad_cuenta(
+        self,
+        id_ejecucion: str,
+    ) -> tuple[bool, Path, str]:
+        """
+        Abre la sección de movimientos bancarios de TestFire.
+    
+        En la interfaz de Altoro Mutual esta opción aparece como
+        "View Recent Transactions". Dentro del caso de evaluación
+        corresponde a la sección "Account Activity".
+    
+        El método realiza las siguientes validaciones:
+    
+        1. Comprueba que exista una sesión iniciada.
+        2. Presiona el enlace de movimientos.
+        3. Espera que cargue la página transaction.jsp.
+        4. Comprueba que aparezca el encabezado Recent Transactions.
+        5. Comprueba que exista la tabla de movimientos.
+        6. Genera una captura de evidencia.
+    
+        Args:
+            id_ejecucion:
+                Identificador único de la ejecución actual. Se utiliza
+                para relacionar la captura con los registros de auditoría.
+    
+        Returns:
+            tuple[bool, Path, str]:
+                Una tupla con los siguientes datos:
+    
+                - Resultado de la navegación.
+                - Ruta local de la captura.
+                - Descripción del resultado.
+        """
+    
+        print(
+            "[TESTFIRE] Abriendo la actividad de la cuenta..."
+        )
+    
+        # Antes de navegar, comprobamos que la sesión siga activa.
+        # Esto evita intentar acceder a movimientos sin autenticación.
+        if not self._login_exitoso():
+            detalle = (
+                "No se puede abrir la actividad de la cuenta "
+                "porque no existe una sesión iniciada."
+            )
+    
+            print(f"[TESTFIRE] {detalle}")
+    
+            ruta_captura = self.navegador.capturar_evidencia(
+                id_ejecucion,
+                "actividad_cuenta_sin_sesion",
+            )
+    
+            return False, ruta_captura, detalle
+    
+        try:
+            # MenuHyperLink2 corresponde al enlace visible como
+            # "View Recent Transactions".
+            enlace_movimientos = self.espera.until(
+                EC.element_to_be_clickable(
+                    (By.ID, "MenuHyperLink2")
+                )
+            )
+    
+            enlace_movimientos.click()
+    
+            # Esperamos la redirección a la página de movimientos.
+            self.espera.until(
+                EC.url_contains("/bank/transaction.jsp")
+            )
+    
+            # Verificamos el encabezado de la página. No basta con
+            # revisar solamente la URL porque podría cargar incompleta.
+            self.espera.until(
+                EC.visibility_of_element_located(
+                    (
+                        By.XPATH,
+                        (
+                            "//h1[contains("
+                            "normalize-space(.), "
+                            "'Recent Transactions')]"
+                        ),
+                    )
+                )
+            )
+    
+            # Esperamos la tabla donde TestFire presenta los movimientos.
+            # La tabla puede existir aunque no contenga registros.
+            self.espera.until(
+                EC.visibility_of_element_located(
+                    (
+                        By.ID,
+                        (
+                            "_ctl0__ctl0_Content_Main_"
+                            "MyTransactions"
+                        ),
+                    )
+                )
+            )
+    
+            detalle = (
+                "Se abrió correctamente la sección de movimientos "
+                "recientes de TestFire."
+            )
+    
+            print(
+                "[TESTFIRE] Actividad de la cuenta cargada "
+                "correctamente."
+            )
+    
+            # La captura será posteriormente subida a Google Drive
+            # y registrada en Google Sheets desde main.py.
+            ruta_captura = self.navegador.capturar_evidencia(
+                id_ejecucion,
+                "actividad_cuenta",
+            )
+    
+            return True, ruta_captura, detalle
+    
+        except TimeoutException:
+            # Este bloque se ejecuta si el enlace, el encabezado o
+            # la tabla no aparecen dentro del tiempo configurado.
+            detalle = (
+                "Tiempo de espera agotado al abrir la actividad "
+                "de la cuenta."
+            )
+    
+            print(f"[TESTFIRE] {detalle}")
+    
+            ruta_captura = self.navegador.capturar_evidencia(
+                id_ejecucion,
+                "error_actividad_cuenta",
+            )
+    
+            return False, ruta_captura, detalle    

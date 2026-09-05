@@ -43,9 +43,7 @@ class GoogleSheetsAuditoria:
         ruta_config = self.raiz_proyecto / "config" / "config.json"
 
         if not ruta_config.exists():
-            raise FileNotFoundError(
-                f"No se encontró config.json en: {ruta_config}"
-            )
+            raise FileNotFoundError(f"No se encontró config.json en: {ruta_config}")
 
         with open(ruta_config, "r", encoding="utf-8") as archivo:
             return json.load(archivo)
@@ -54,8 +52,7 @@ class GoogleSheetsAuditoria:
         configuracion_google = self.configuracion["google"]
 
         ruta_credenciales = (
-            self.raiz_proyecto
-            / configuracion_google["credenciales_path"]
+            self.raiz_proyecto / configuracion_google["credenciales_path"]
         )
 
         if not ruta_credenciales.exists():
@@ -70,13 +67,9 @@ class GoogleSheetsAuditoria:
 
         cliente = gspread.authorize(credenciales)
 
-        documento = cliente.open_by_key(
-            configuracion_google["spreadsheet_id"]
-        )
+        documento = cliente.open_by_key(configuracion_google["spreadsheet_id"])
 
-        return documento.worksheet(
-            configuracion_google["worksheet_name"]
-        )
+        return documento.worksheet(configuracion_google["worksheet_name"])
 
     def _inicializar_encabezados(self):
         encabezados_actuales = self.hoja.row_values(1)
@@ -89,6 +82,12 @@ class GoogleSheetsAuditoria:
             print("[SHEETS] Encabezados creados correctamente.")
 
         elif encabezados_actuales != CABECERAS:
+            print(
+                "[ERROR SHEETS] Los encabezados existentes no coinciden con los requeridos."
+            )
+            print(f"[ACTUALES] {encabezados_actuales}")
+            print(f"[ESPERADOS] {CABECERAS}")
+
             raise ValueError(
                 "Los encabezados existentes no coinciden con los "
                 "encabezados requeridos por el RPA."
@@ -151,7 +150,5 @@ class GoogleSheetsAuditoria:
             return True
 
         except Exception as error:
-            print(
-                f"[ERROR SHEETS] No se pudo registrar el evento: {error}"
-            )
+            print(f"[ERROR SHEETS] No se pudo registrar el evento: {error}")
             return False
