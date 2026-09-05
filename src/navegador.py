@@ -228,6 +228,74 @@ class NavegadorTestFire:
         # Devolvemos dos resultados:
         # la ubicación de la captura y el título de la página.
         return ruta_captura, titulo
+    
+    def capturar_evidencia(self, id_ejecucion, nombre_paso):
+        """
+        Guarda una captura de la página actualmente visible.
+
+        Este método podrá utilizarse en cualquier etapa del robot:
+        login, resumen de cuentas, movimientos, conciliación o errores.
+
+        Args:
+            id_ejecucion (str):
+                Identificador único de la ejecución actual.
+
+            nombre_paso (str):
+                Nombre descriptivo de la evidencia, por ejemplo:
+                "login_exitoso" o "account_summary".
+
+        Returns:
+            Path:
+                Ruta completa donde se guardó la captura.
+
+        Raises:
+            RuntimeError:
+                Si Firefox no está iniciado o la captura no puede guardarse.
+        """
+
+        # No podemos capturar si Selenium todavía no creó Firefox.
+        if self.driver is None:
+            raise RuntimeError(
+                "No se puede capturar porque Firefox no está iniciado."
+            )
+
+        # Obtenemos la carpeta de evidencias desde config.json.
+        ruta_evidencias = (
+            self.raiz_proyecto
+            / self.configuracion["rutas"]["evidencias"]
+        )
+
+        # Crea la carpeta solamente si todavía no existe.
+        # exist_ok=True evita duplicarla o generar un error.
+        ruta_evidencias.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        # El ID de ejecución evita sobrescribir capturas anteriores.
+        ruta_captura = (
+            ruta_evidencias
+            / f"{id_ejecucion}_{nombre_paso}.png"
+        )
+
+        # Selenium captura exactamente lo que muestra Firefox.
+        captura_correcta = self.driver.save_screenshot(
+            str(ruta_captura)
+        )
+
+        # save_screenshot devuelve False si no pudo crear la imagen.
+        if not captura_correcta:
+            raise RuntimeError(
+                f"No se pudo guardar la captura: {nombre_paso}"
+            )
+
+        print(
+            f"[EVIDENCIA] Captura guardada: "
+            f"{ruta_captura.name}"
+        )
+
+        return ruta_captura
+    
 
     def cerrar(self):
         """
