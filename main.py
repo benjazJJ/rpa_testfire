@@ -11,15 +11,18 @@ Flujo actual:
 6. Iniciar sesión automáticamente.
 7. Guardar y subir la evidencia del login.
 8. Abrir la sección de actividad de la cuenta.
-9. Guardar y subir la evidencia de los movimientos.
-10. Registrar cada acción en Google Sheets.
-11. Mantener Firefox abierto hasta presionar ENTER.
-12. Cerrar Firefox de manera segura.
+9. Extraer los movimientos de la tabla.
+10. Generar un reporte Excel con los movimientos.
+11. Subir el reporte Excel a Google Drive.
+12. Registrar cada acción en Google Sheets.
+13. Mantener Firefox abierto hasta presionar ENTER.
+14. Cerrar Firefox de manera segura.
 """
 
 import getpass
 import time
 
+from src.excel_report import GeneradorReporteExcel
 from src.google_drive import GoogleDriveEvidencias
 from src.google_sheets import GoogleSheetsAuditoria
 from src.navegador import NavegadorTestFire
@@ -75,6 +78,11 @@ def main():
     # Estados iniciales utilizados en el resumen final.
     estado_login = "No ejecutado"
     estado_actividad = "No ejecutado"
+    estado_extraccion = "No ejecutado"
+    estado_excel = "No ejecutado"
+
+    # Cantidad de movimientos obtenidos desde TestFire.
+    cantidad_movimientos = 0
 
     try:
         # PASO 1: ABRIR DEMO TESTFIRE
@@ -97,7 +105,8 @@ def main():
             ruta_inicio.name,
         )
 
-        # Registramos la apertura exitosa del sitio.
+        # Registramos la apertura exitosa del sitio y guardamos
+        # el enlace de su evidencia.
         auditoria.registrar_evento(
             id_ejecucion=id_ejecucion,
             modulo="Navegador",
@@ -108,7 +117,6 @@ def main():
             evidencia_drive=enlace_inicio,
         )
 
-        
         # PASO 2: INICIAR SESIÓN
 
         paso_actual = "Iniciar sesión"
@@ -157,8 +165,8 @@ def main():
 
         # PASO 3: ABRIR ACTIVIDAD DE LA CUENTA
 
-        # Este paso solamente se ejecuta cuando el login fue
-        # realmente exitoso.
+        # La actividad bancaria solamente puede consultarse
+        # cuando el inicio de sesión fue exitoso.
         if exito_login:
             paso_actual = "Abrir actividad de cuenta"
             inicio_paso = time.perf_counter()
@@ -175,20 +183,19 @@ def main():
                 id_ejecucion=id_ejecucion,
             )
 
-            # Subimos a Drive la captura de la página
+            # Subimos a Google Drive la captura de la página
             # de movimientos.
             enlace_actividad = drive.subir_archivo(
                 ruta_actividad,
                 ruta_actividad.name,
             )
 
-            # Convertimos el resultado booleano en texto.
             if exito_actividad:
                 estado_actividad = "Exitoso"
             else:
                 estado_actividad = "Fallido"
 
-            # Registramos la navegación en Google Sheets.
+            # Registramos el resultado de la navegación.
             auditoria.registrar_evento(
                 id_ejecucion=id_ejecucion,
                 modulo="Consulta bancaria",
@@ -199,12 +206,120 @@ def main():
                 evidencia_drive=enlace_actividad,
             )
 
+            # PASO 4: EXTRAER MOVIMIENTOS
+
+            # La extracción solamente se ejecuta si la página
+            # de actividad fue cargada correctamente.
+            if exito_actividad:
+                paso_actual = "Extraer movimientos"
+                inicio_paso = time.perf_counter()
+
+                # El método retorna:
+                # - Resultado de la extracción.
+                # - Lista de movimientos.
+                # - Ruta de la captura.
+                # - Descripción del resultado.
+                (
+                    exito_extraccion,
+                    movimientos,
+                    ruta_extraccion,
+                    detalle_extraccion,
+                ) = robot.extraer_movimientos(
+                    id_ejecucion=id_ejecucion,
+                )
+
+                # Contamos los elementos extraídos mediante len().
+                cantidad_movimientos = len(movimientos)
+
+                # Subimos la captura de la tabla procesada.
+                enlace_extraccion = drive.subir_archivo(
+                    ruta_extraccion,
+                    ruta_extraccion.name,
+                )
+
+                if exito_extraccion:
+                    estado_extraccion = "Exitoso"
+                else:
+                    estado_extraccion = "Fallido"
+
+                # Registramos el resultado y la cantidad de filas
+                # extraídas en Google Sheets.
+                auditoria.registrar_evento(
+                    id_ejecucion=id_ejecucion,
+                    modulo="Extracción web",
+                    accion=paso_actual,
+                    estado=estado_extraccion,
+                    detalle=detalle_extraccion,
+                    tiempo_inicio=inicio_paso,
+                    registros=cantidad_movimientos,
+                    evidencia_drive=enlace_extraccion,
+                )
+
+                # PASO 5: GENERAR REPORTE EXCEL
+
+                # El reporte solamente se genera cuando la
+                # extracción de movimientos fue exitosa.
+                if exito_extraccion:
+                    paso_actual = "Generar reporte Excel"
+                    inicio_paso = time.perf_counter()
+
+                    # Creamos el generador encargado de transformar
+                    # la lista de movimientos en un libro Excel.
+                    generador_excel = GeneradorReporteExcel()
+
+                    # El archivo se guarda localmente en data/salida.
+                    ruta_reporte = generador_excel.generar_reporte(
+                        movimientos=movimientos,
+                        id_ejecucion=id_ejecucion,
+                    )
+
+                    # Subimos el mismo reporte a Google Drive para
+                    # mantener una copia centralizada y auditable.
+                    enlace_reporte = drive.subir_archivo(
+                        ruta_reporte,
+                        ruta_reporte.name,
+                    )
+
+                    estado_excel = "Exitoso"
+
+                    # Registramos en Google Sheets el nombre del
+                    # reporte, los registros incluidos y su enlace.
+                    auditoria.registrar_evento(
+                        id_ejecucion=id_ejecucion,
+                        modulo="Reporte",
+                        accion=paso_actual,
+                        estado=estado_excel,
+                        detalle=(
+                            "Reporte Excel generado y subido "
+                            f"correctamente: {ruta_reporte.name}"
+                        ),
+                        tiempo_inicio=inicio_paso,
+                        registros=cantidad_movimientos,
+                        evidencia_drive=enlace_reporte,
+                    )
+
+                else:
+                    # Evitamos generar un archivo vacío cuando la
+                    # extracción no pudo completarse correctamente.
+                    print(
+                        "[RPA] Reporte Excel omitido porque "
+                        "la extracción no fue exitosa."
+                    )
+
+            else:
+                # No se intenta extraer información si la página
+                # de actividad no pudo cargarse.
+                print(
+                    "[RPA] Extracción omitida porque la actividad "
+                    "de la cuenta no fue cargada."
+                )
+
         else:
             # Si el login fue rechazado, el RPA no intenta acceder
-            # a información que requiere una sesión autenticada.
+            # a operaciones que requieren autenticación.
             print(
-                "[RPA] Actividad de cuenta omitida porque "
-                "el inicio de sesión no fue exitoso."
+                "[RPA] Actividad de cuenta y extracción omitidas "
+                "porque el inicio de sesión no fue exitoso."
             )
 
         # RESUMEN FINAL
@@ -215,9 +330,10 @@ def main():
         print("================================")
         print(f"ID de ejecución: {id_ejecucion}")
         print(f"Resultado del login: {estado_login}")
-        print(
-            f"Actividad de cuenta: {estado_actividad}"
-        )
+        print(f"Actividad de cuenta: {estado_actividad}")
+        print(f"Extracción de movimientos: {estado_extraccion}")
+        print(f"Movimientos encontrados: {cantidad_movimientos}")
+        print(f"Reporte Excel: {estado_excel}")
 
         # Permite revisar visualmente la última página antes
         # de cerrar Firefox.

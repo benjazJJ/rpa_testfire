@@ -515,4 +515,180 @@ class TestFireBot:
                 "error_actividad_cuenta",
             )
     
-            return False, ruta_captura, detalle    
+            return False, ruta_captura, detalle  
+
+    def extraer_movimientos(
+        self,
+        id_ejecucion: str,
+    ) -> tuple[bool, list[dict[str, str]], Path, str]:
+        """
+        Extrae los movimientos visibles en Recent Transactions.
+
+        Cada fila de la tabla se convierte en un diccionario con las
+        siguientes propiedades:
+
+        - id_transaccion
+        - fecha_hora
+        - id_cuenta
+        - accion
+        - monto
+
+        En esta etapa los valores se conservan como texto. La conversión
+        de fechas y montos se realizará posteriormente, cuando preparemos
+        el archivo Excel y la conciliación.
+
+        Args:
+            id_ejecucion:
+                Identificador único de la ejecución actual. Se utiliza
+                para nombrar la captura de evidencia.
+
+        Returns:
+            tuple[bool, list[dict[str, str]], Path, str]:
+                Tupla que contiene:
+
+                - Resultado de la extracción.
+                - Lista de movimientos encontrados.
+                - Ruta de la captura de evidencia.
+                - Descripción del resultado.
+        """
+
+        print("[TESTFIRE] Extrayendo movimientos de la tabla...")
+
+        # Verificamos que el navegador se encuentre en la página
+        # correcta antes de intentar leer la tabla.
+        url_actual = self.driver.current_url.lower()
+
+        if "/bank/transaction.jsp" not in url_actual:
+            detalle = (
+                "No se pueden extraer movimientos porque el "
+                "navegador no está en Recent Transactions."
+            )
+
+            print(f"[TESTFIRE] {detalle}")
+
+            ruta_captura = self.navegador.capturar_evidencia(
+                id_ejecucion,
+                "extraccion_fuera_de_pagina",
+            )
+
+            return False, [], ruta_captura, detalle
+
+        try:
+            # Esperamos hasta que la tabla esté visible.
+            tabla_movimientos = self.espera.until(
+                EC.visibility_of_element_located(
+                    (
+                        By.ID,
+                        (
+                            "_ctl0__ctl0_Content_Main_"
+                            "MyTransactions"
+                        ),
+                    )
+                )
+            )
+
+            # Buscamos todas las filas que contienen celdas <td>.
+            # Esto incluye la cabecera y las filas de movimientos.
+            filas = tabla_movimientos.find_elements(
+                By.XPATH,
+                ".//tr[td]",
+            )
+
+            # Aquí almacenaremos cada movimiento extraído.
+            movimientos = []
+
+            # El ciclo for permite procesar cada fila individualmente.
+            for fila in filas:
+                celdas = fila.find_elements(
+                    By.TAG_NAME,
+                    "td",
+                )
+
+                # Convertimos las celdas en textos limpios,
+                # eliminando saltos de línea y espacios repetidos.
+                valores = [
+                    " ".join(celda.text.split())
+                    for celda in celdas
+                ]
+
+                # La tabla válida tiene cinco columnas.
+                # Si una fila posee menos columnas, se ignora.
+                if len(valores) < 5:
+                    continue
+
+                # La primera fila contiene los encabezados:
+                # Transaction ID, Transaction Time, etc.
+                # No debe incluirse como movimiento.
+                if valores[0].strip().lower() == "transaction id":
+                    continue
+
+                # Ignoramos cualquier fila completamente vacía.
+                if not any(valores):
+                    continue
+
+                # Convertimos la fila en un diccionario.
+                movimiento = {
+                    "id_transaccion": valores[0],
+                    "fecha_hora": valores[1],
+                    "id_cuenta": valores[2],
+                    "accion": valores[3],
+                    "monto": valores[4],
+                }
+
+                movimientos.append(movimiento)
+
+                # Mostramos los datos para comprobar visualmente
+                # que cada columna fue extraída correctamente.
+                numero_movimiento = len(movimientos)
+
+                print(
+                    f"[MOVIMIENTO {numero_movimiento}] "
+                    f"ID: {movimiento['id_transaccion']} | "
+                    f"Fecha: {movimiento['fecha_hora']} | "
+                    f"Cuenta: {movimiento['id_cuenta']} | "
+                    f"Acción: {movimiento['accion']} | "
+                    f"Monto: {movimiento['monto']}"
+                )
+
+            cantidad_movimientos = len(movimientos)
+
+            detalle = (
+                "Extracción completada correctamente. "
+                f"Movimientos encontrados: {cantidad_movimientos}."
+            )
+
+            print(
+                "[TESTFIRE] Extracción completada. "
+                f"Registros encontrados: {cantidad_movimientos}."
+            )
+
+            # Capturamos la tabla que acaba de ser procesada.
+            # main.py se encargará posteriormente de subirla a Drive.
+            ruta_captura = self.navegador.capturar_evidencia(
+                id_ejecucion,
+                "movimientos_extraidos",
+            )
+
+            return (
+                True,
+                movimientos,
+                ruta_captura,
+                detalle,
+            )
+
+        except TimeoutException:
+            # Se registra un resultado controlado si la tabla no aparece
+            # dentro del tiempo máximo configurado.
+            detalle = (
+                "Tiempo de espera agotado: no se encontró la "
+                "tabla de movimientos."
+            )
+
+            print(f"[TESTFIRE] {detalle}")
+
+            ruta_captura = self.navegador.capturar_evidencia(
+                id_ejecucion,
+                "error_extraccion_movimientos",
+            )
+
+            return False, [], ruta_captura, detalle
