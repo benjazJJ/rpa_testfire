@@ -15,9 +15,11 @@ Flujo actual:
 10. Conciliar los movimientos con el archivo maestro local.
 11. Generar un reporte Excel con movimientos y conciliación.
 12. Subir el reporte Excel a Google Drive.
-13. Registrar cada acción en Google Sheets.
-14. Mantener Firefox abierto hasta presionar ENTER.
-15. Cerrar Firefox de manera segura.
+13. Enviar el reporte a los destinatarios mediante Gmail API.
+14. Enviar un resumen JSON mediante HTTP POST.
+15. Registrar cada acción en Google Sheets.
+16. Mantener Firefox abierto hasta presionar ENTER.
+17. Cerrar Firefox de manera segura.
 """
 
 import getpass
@@ -27,7 +29,9 @@ from src.conciliacion import ConciliadorMovimientos
 from src.excel_report import GeneradorReporteExcel
 from src.google_drive import GoogleDriveEvidencias
 from src.google_sheets import GoogleSheetsAuditoria
+from src.logs import RegistroHttpWebhook
 from src.navegador import NavegadorTestFire
+from src.notificaciones import NotificadorGmail
 from src.testfire_bot import TestFireBot
 
 
@@ -83,6 +87,8 @@ def main():
     estado_extraccion = "No ejecutado"
     estado_conciliacion = "No ejecutado"
     estado_excel = "No ejecutado"
+    estado_correo = "No ejecutado"
+    estado_http = "No ejecutado"
 
     # Cantidad de movimientos obtenidos desde TestFire.
     cantidad_movimientos = 0
@@ -419,6 +425,145 @@ def main():
                         evidencia_drive=enlace_reporte,
                     )
 
+                    # PASO 7: ENVIAR REPORTE MEDIANTE GMAIL API
+
+                    paso_actual = "Enviar reporte por correo"
+                    inicio_paso = time.perf_counter()
+
+                    try:
+                        # NotificadorGmail utiliza el mismo cliente OAuth
+                        # que Drive, pero conserva su propio token y permiso.
+                        notificador = NotificadorGmail()
+
+                        # Los destinatarios se obtienen desde config.json.
+                        # Esto permite cambiarlos sin modificar main.py.
+                        exito_correo, detalle_correo = (
+                            notificador.enviar_reporte(
+                                destinatario=(
+                                    notificador
+                                    .destinatarios_configurados
+                                ),
+                                ruta_reporte=ruta_reporte,
+                                id_ejecucion=id_ejecucion,
+                                estado_conciliacion=(
+                                    estado_conciliacion
+                                ),
+                                cantidad_movimientos=(
+                                    cantidad_movimientos
+                                ),
+                                enlace_drive=enlace_reporte,
+                            )
+                        )
+
+                    except Exception as error_correo:
+                        # Una falla en Gmail no elimina el reporte ni impide
+                        # registrar el resto de la ejecución. Tampoco se
+                        # incluyen tokens o contraseñas en este detalle.
+                        exito_correo = False
+                        detalle_correo = (
+                            "No fue posible completar la notificación "
+                            "por correo. "
+                            f"Tipo de error: "
+                            f"{type(error_correo).__name__}."
+                        )
+                        print(f"[GMAIL] {detalle_correo}")
+
+                    estado_correo = (
+                        "Exitoso" if exito_correo else "Fallido"
+                    )
+
+                    # Google Sheets conserva el resultado del correo y el
+                    # enlace al mismo reporte que fue enviado como adjunto.
+                    auditoria.registrar_evento(
+                        id_ejecucion=id_ejecucion,
+                        modulo="Notificaciones",
+                        accion=paso_actual,
+                        estado=estado_correo,
+                        detalle=detalle_correo,
+                        tiempo_inicio=inicio_paso,
+                        registros=cantidad_movimientos,
+                        evidencia_drive=enlace_reporte,
+                    )
+
+                    # PASO 8: ENVIAR RESUMEN MEDIANTE HTTP POST
+
+                    paso_actual = "Enviar resumen HTTP"
+                    inicio_paso = time.perf_counter()
+
+                    # RegistroHttpWebhook obtiene la URL desde
+                    # config/config.json. El JSON no incluye usuario,
+                    # contraseña ni credenciales de Google.
+                    registro_http = RegistroHttpWebhook()
+
+                    exito_http, detalle_http = (
+                        registro_http.enviar_resumen(
+                            id_ejecucion=id_ejecucion,
+                            estados={
+                                "login": estado_login,
+                                "actividad_cuenta": estado_actividad,
+                                "extraccion": estado_extraccion,
+                                "conciliacion": estado_conciliacion,
+                                "reporte_excel": estado_excel,
+                                "correo": estado_correo,
+                            },
+                            metricas={
+                                "movimientos_extraidos": (
+                                    cantidad_movimientos
+                                ),
+                                "movimientos_maestro": (
+                                    resumen_conciliacion[
+                                        "total_maestro"
+                                    ]
+                                ),
+                                "conciliados": (
+                                    resumen_conciliacion[
+                                        "conciliados"
+                                    ]
+                                ),
+                                "no_conciliados": (
+                                    resumen_conciliacion[
+                                        "no_conciliados"
+                                    ]
+                                ),
+                                "con_diferencias": (
+                                    resumen_conciliacion[
+                                        "con_diferencias"
+                                    ]
+                                ),
+                                "solo_testfire": (
+                                    resumen_conciliacion[
+                                        "solo_testfire"
+                                    ]
+                                ),
+                                "solo_maestro": (
+                                    resumen_conciliacion[
+                                        "solo_maestro"
+                                    ]
+                                ),
+                            },
+                            enlace_reporte=enlace_reporte,
+                        )
+                    )
+
+                    estado_http = (
+                        "Exitoso" if exito_http else "Fallido"
+                    )
+
+                    # Aunque el webhook no esté disponible, el método
+                    # devuelve False en lugar de lanzar una excepción.
+                    # Así podemos dejar constancia en la auditoría sin
+                    # perder el reporte que ya fue generado y subido.
+                    auditoria.registrar_evento(
+                        id_ejecucion=id_ejecucion,
+                        modulo="Integración HTTP",
+                        accion=paso_actual,
+                        estado=estado_http,
+                        detalle=detalle_http,
+                        tiempo_inicio=inicio_paso,
+                        registros=cantidad_movimientos,
+                        evidencia_drive=enlace_reporte,
+                    )
+
                 else:
                     # Evitamos generar un archivo vacío cuando la
                     # extracción no pudo completarse correctamente.
@@ -464,6 +609,8 @@ def main():
             f"{resumen_conciliacion['no_conciliados']}"
         )
         print(f"Reporte Excel: {estado_excel}")
+        print(f"Envío por correo: {estado_correo}")
+        print(f"Envío HTTP POST: {estado_http}")
 
         # Permite revisar visualmente la última página antes
         # de cerrar Firefox.

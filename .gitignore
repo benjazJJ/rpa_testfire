@@ -6,3 +6,5 @@ evidencias/*
 data/salida/*
 config/oauth_drive.json
 config/token_drive.json
+config/token_gmail.json
+config/config.json
