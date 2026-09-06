@@ -340,16 +340,19 @@ class TestFireBot:
         mensaje_error = self._obtener_error_login()
 
         if mensaje_error:
-            print(
-                f"[TESTFIRE] Login rechazado: {mensaje_error}"
+            detalle = (
+                "Credenciales incorrectas: el usuario o la "
+                "contraseña no fueron encontrados en el sistema."
             )
+
+            print(f"[TESTFIRE] Login rechazado: {detalle}")
 
             ruta_captura = self.navegador.capturar_evidencia(
                 id_ejecucion,
                 "login_fallido",
             )
 
-            return False, ruta_captura, mensaje_error
+            return False, ruta_captura, detalle
 
         # Solo informamos éxito si no existe un mensaje de rechazo y
         # además encontramos una señal real de sesión autenticada.

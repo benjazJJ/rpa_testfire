@@ -120,48 +120,105 @@ def main():
         # PASO 2: INICIAR SESIÓN
 
         paso_actual = "Iniciar sesión"
-        inicio_paso = time.perf_counter()
-
         # TestFireBot utiliza el mismo Firefox que fue iniciado
         # por NavegadorTestFire.
         robot = TestFireBot(navegador)
 
-        # El método retorna:
-        # - True o False según el resultado.
-        # - La ruta local de la captura.
-        # - Una descripción del resultado.
-        (
-            exito_login,
-            ruta_login,
-            detalle_login,
-        ) = robot.iniciar_sesion(
-            usuario=usuario,
-            contrasena=contrasena,
-            id_ejecucion=id_ejecucion,
-        )
+        # Repetimos el login hasta que TestFire acepte las credenciales.
+        # Cada intento genera su propia evidencia y registro de auditoría.
+        numero_intento = 0
 
-        # Subimos la captura del resultado del login.
-        enlace_login = drive.subir_archivo(
-            ruta_login,
-            ruta_login.name,
-        )
+        while True:
+            # Una contraseña vacía no se envía al sitio.
+            if not contrasena:
+                print(
+                    "\n[LOGIN] La contraseña no puede estar vacía. "
+                    "Inténtalo nuevamente.\n"
+                )
+            else:
+                numero_intento += 1
+                inicio_paso = time.perf_counter()
 
-        # Transformamos el valor booleano en un estado legible.
-        if exito_login:
-            estado_login = "Exitoso"
-        else:
-            estado_login = "Fallido"
+                # Agregar el número de intento evita que una captura
+                # sobrescriba la evidencia de un intento anterior.
+                id_evidencia_login = (
+                    f"{id_ejecucion}_intento_{numero_intento}"
+                )
 
-        # Registramos el resultado del login en Google Sheets.
-        auditoria.registrar_evento(
-            id_ejecucion=id_ejecucion,
-            modulo="Autenticación",
-            accion=paso_actual,
-            estado=estado_login,
-            detalle=detalle_login,
-            tiempo_inicio=inicio_paso,
-            evidencia_drive=enlace_login,
-        )
+                (
+                    exito_login,
+                    ruta_login,
+                    detalle_login,
+                ) = robot.iniciar_sesion(
+                    usuario=usuario,
+                    contrasena=contrasena,
+                    id_ejecucion=id_evidencia_login,
+                )
+
+                # Subimos y auditamos tanto los intentos exitosos como
+                # los rechazados, sin almacenar nunca la contraseña.
+                enlace_login = drive.subir_archivo(
+                    ruta_login,
+                    ruta_login.name,
+                )
+
+                estado_login = (
+                    "Exitoso" if exito_login else "Fallido"
+                )
+
+                auditoria.registrar_evento(
+                    id_ejecucion=id_ejecucion,
+                    modulo="Autenticación",
+                    accion=(
+                        f"{paso_actual} - intento {numero_intento}"
+                    ),
+                    estado=estado_login,
+                    detalle=detalle_login,
+                    tiempo_inicio=inicio_paso,
+                    evidencia_drive=enlace_login,
+                )
+
+                if exito_login:
+                    break
+
+                es_rechazo_credenciales = any(
+                    mensaje in detalle_login.lower()
+                    for mensaje in (
+                        "credenciales incorrectas",
+                        "login failed",
+                        "username or password was not found",
+                    )
+                )
+
+                print("\n================================")
+                if es_rechazo_credenciales:
+                    print("CREDENCIALES INCORRECTAS")
+                    print("================================")
+                    print("El usuario o la contraseña no son válidos.")
+                else:
+                    print("NO FUE POSIBLE INICIAR SESIÓN")
+                    print("================================")
+                    print(detalle_login)
+
+                if numero_intento >= 3:
+                    print("\n================================")
+                    print("MÁXIMO DE INTENTOS ALCANZADO")
+                    print("================================")
+                    print(
+                        "El RPA se cerrará por seguridad después "
+                        "de tres intentos fallidos."
+                    )
+                    return
+
+                print("Vuelve a intentarlo.\n")
+
+            usuario = (
+                input("Usuario TestFire [jsmith]: ").strip()
+                or "jsmith"
+            )
+            contrasena = getpass.getpass(
+                "Contraseña TestFire: "
+            )
 
         # PASO 3: ABRIR ACTIVIDAD DE LA CUENTA
 
