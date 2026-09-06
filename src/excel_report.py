@@ -8,14 +8,16 @@ El reporte contiene:
 
 1. Una hoja con el detalle de los movimientos.
 2. Una hoja con indicadores y fórmulas de resumen.
-3. Fechas y montos almacenados con sus tipos correctos.
-4. Filtros, formato, colores y filas congeladas.
+3. Una hoja con el resultado detallado de la conciliación.
+4. Fechas y montos almacenados con sus tipos correctos.
+5. Filtros, formato, colores y filas congeladas.
 """
 
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 from openpyxl import Workbook
 from openpyxl.formatting.rule import CellIsRule
@@ -69,6 +71,7 @@ class GeneradorReporteExcel:
         self.color_azul_claro = "D9EAF7"
         self.color_verde = "E2F0D9"
         self.color_rojo = "FCE4D6"
+        self.color_amarillo = "FFF2CC"
         self.color_blanco = "FFFFFF"
         self.color_gris = "D9E1F2"
 
@@ -403,11 +406,191 @@ class GeneradorReporteExcel:
 
         return hoja
 
+    def _crear_hoja_conciliacion(
+        self,
+        libro: Workbook,
+        resultados_conciliacion: list[dict[str, Any]],
+    ):
+        """
+        Crea una hoja con el detalle de la conciliación.
+
+        Cada fila indica si el movimiento coincide con el maestro, si
+        contiene diferencias o si solamente existe en una de las fuentes.
+
+        Args:
+            libro:
+                Libro Excel donde se agregará la hoja.
+
+            resultados_conciliacion:
+                Lista devuelta por
+                ConciliadorMovimientos.conciliar().
+
+        Returns:
+            Worksheet:
+                Hoja Conciliación creada y formateada.
+        """
+
+        hoja = libro.create_sheet("Conciliación")
+        hoja.sheet_view.showGridLines = False
+
+        encabezados = [
+            "ID Transacción",
+            "Fecha/Hora",
+            "ID Cuenta",
+            "Acción",
+            "Monto",
+            "Estado conciliación",
+            "Detalle",
+        ]
+
+        hoja.append(encabezados)
+
+        for numero_fila, resultado in enumerate(
+            resultados_conciliacion,
+            start=2,
+        ):
+            try:
+                fecha_convertida = self._convertir_fecha(
+                    resultado.get("fecha_hora", "")
+                )
+
+                monto_convertido = self._convertir_monto(
+                    resultado.get("monto", "")
+                )
+            except ValueError as error:
+                raise ValueError(
+                    "Error al preparar el resultado de conciliación "
+                    f"{numero_fila - 1}: {error}"
+                ) from error
+
+            hoja.append(
+                [
+                    str(resultado.get("id_transaccion", "")),
+                    fecha_convertida,
+                    str(resultado.get("id_cuenta", "")),
+                    str(resultado.get("accion", "")).title(),
+                    monto_convertido,
+                    str(
+                        resultado.get(
+                            "estado_conciliacion",
+                            "",
+                        )
+                    ),
+                    str(
+                        resultado.get(
+                            "detalle_conciliacion",
+                            "",
+                        )
+                    ),
+                ]
+            )
+
+        # Aplicamos el mismo estilo visual utilizado en Movimientos.
+        for celda in hoja[1]:
+            celda.fill = PatternFill(
+                fill_type="solid",
+                fgColor=self.color_azul_oscuro,
+            )
+            celda.font = Font(
+                color=self.color_blanco,
+                bold=True,
+            )
+            celda.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+            )
+            celda.border = self.borde_encabezado
+
+        hoja.row_dimensions[1].height = 24
+        hoja.freeze_panes = "A2"
+
+        # Definimos formatos y colores según el resultado de cada fila.
+        for fila in range(2, hoja.max_row + 1):
+            hoja.cell(fila, 1).number_format = "@"
+            hoja.cell(fila, 2).number_format = "yyyy-mm-dd hh:mm"
+            hoja.cell(fila, 3).number_format = "@"
+            hoja.cell(fila, 5).number_format = (
+                '"$"#,##0.00;[Red]-"$"#,##0.00'
+            )
+
+            for columna in (1, 2, 3, 6):
+                hoja.cell(fila, columna).alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                )
+
+            hoja.cell(fila, 4).alignment = Alignment(
+                horizontal="left",
+                vertical="center",
+            )
+            hoja.cell(fila, 5).alignment = Alignment(
+                horizontal="right",
+                vertical="center",
+            )
+            hoja.cell(fila, 7).alignment = Alignment(
+                horizontal="left",
+                vertical="center",
+                wrap_text=True,
+            )
+
+            estado = hoja.cell(fila, 6).value
+
+            if estado == "Conciliado":
+                color_estado = self.color_verde
+            elif estado == "Con diferencias":
+                color_estado = self.color_amarillo
+            else:
+                color_estado = self.color_rojo
+
+            hoja.cell(fila, 6).fill = PatternFill(
+                fill_type="solid",
+                fgColor=color_estado,
+            )
+
+        anchos_columnas = {
+            "A": 18,
+            "B": 21,
+            "C": 16,
+            "D": 18,
+            "E": 18,
+            "F": 23,
+            "G": 52,
+        }
+
+        for columna, ancho in anchos_columnas.items():
+            hoja.column_dimensions[columna].width = ancho
+
+        # La tabla permite filtrar rápidamente por estado de conciliación.
+        if resultados_conciliacion:
+            tabla = Table(
+                displayName="TablaConciliacion",
+                ref=f"A1:G{hoja.max_row}",
+            )
+
+            tabla.tableStyleInfo = TableStyleInfo(
+                name="TableStyleMedium2",
+                showFirstColumn=False,
+                showLastColumn=False,
+                showRowStripes=True,
+                showColumnStripes=False,
+            )
+
+            hoja.add_table(tabla)
+
+        hoja.page_setup.orientation = "landscape"
+        hoja.page_setup.fitToWidth = 1
+        hoja.page_setup.fitToHeight = 0
+        hoja.sheet_properties.pageSetUpPr.fitToPage = True
+        hoja.print_title_rows = "1:1"
+
+        return hoja
+
     def _crear_hoja_resumen(
         self,
         libro: Workbook,
         id_ejecucion: str,
         cantidad_movimientos: int,
+        resumen_conciliacion: dict[str, int] | None = None,
     ):
         """
         Crea una hoja con indicadores generales del reporte.
@@ -426,6 +609,10 @@ class GeneradorReporteExcel:
             cantidad_movimientos:
                 Cantidad de movimientos originalmente exportados.
 
+            resumen_conciliacion:
+                Indicadores devueltos por la conciliación. Puede ser None
+                para mantener compatibilidad con reportes sin conciliación.
+
         Returns:
             Worksheet:
                 Hoja Resumen creada y formateada.
@@ -433,6 +620,9 @@ class GeneradorReporteExcel:
 
         hoja = libro.create_sheet("Resumen")
         hoja.sheet_view.showGridLines = False
+
+        if resumen_conciliacion is None:
+            resumen_conciliacion = {}
 
         # Dejamos al menos la fila 2 disponible para las fórmulas,
         # incluso si no se encontraron movimientos.
@@ -529,10 +719,12 @@ class GeneradorReporteExcel:
         for fila in range(7, 10):
             hoja.cell(fila, 2).number_format = "#,##0"
 
-        # Formato monetario.
-        for fila in range(10, 13):
-            hoja.cell(fila, 2).number_format = (
-                '"$"#,##0.00;[Red]-"$"#,##0.00'
+            # Formato monetario.
+            # TestFire puede contener montos extremadamente grandes.
+            # La notación científica evita que Excel muestre "####".
+            for fila in range(10, 13):
+                hoja.cell(fila, 2).number_format = (
+                '"$"0.00E+00;[Red]-"$"0.00E+00'
             )
 
         # Estilo de etiquetas.
@@ -556,6 +748,49 @@ class GeneradorReporteExcel:
                 fgColor=self.color_azul_claro,
             )
 
+        # Segunda sección: indicadores de la conciliación.
+        hoja["A14"] = "Indicador de conciliación"
+        hoja["B14"] = "Resultado"
+
+        for celda in hoja[14]:
+            celda.fill = PatternFill(
+                fill_type="solid",
+                fgColor=self.color_azul_oscuro,
+            )
+            celda.font = Font(
+                color=self.color_blanco,
+                bold=True,
+            )
+            celda.alignment = Alignment(
+                horizontal="center",
+            )
+
+        indicadores_conciliacion = (
+            ("Total en maestro", "total_maestro"),
+            ("Conciliados", "conciliados"),
+            ("No conciliados", "no_conciliados"),
+            ("Con diferencias", "con_diferencias"),
+            ("Solo en TestFire", "solo_testfire"),
+            ("Solo en maestro", "solo_maestro"),
+        )
+
+        for fila, (etiqueta, clave) in enumerate(
+            indicadores_conciliacion,
+            start=15,
+        ):
+            hoja.cell(fila, 1, etiqueta)
+            hoja.cell(
+                fila,
+                2,
+                resumen_conciliacion.get(clave, 0),
+            )
+            hoja.cell(fila, 1).font = Font(bold=True)
+            hoja.cell(fila, 1).fill = PatternFill(
+                fill_type="solid",
+                fgColor=self.color_azul_claro,
+            )
+            hoja.cell(fila, 2).number_format = "#,##0"
+
         hoja.column_dimensions["A"].width = 34
         hoja.column_dimensions["B"].width = 30
 
@@ -565,6 +800,8 @@ class GeneradorReporteExcel:
         self,
         movimientos: list[dict[str, str]],
         id_ejecucion: str,
+        resultados_conciliacion: list[dict[str, Any]] | None = None,
+        resumen_conciliacion: dict[str, int] | None = None,
     ) -> Path:
         """
         Genera y guarda el reporte Excel completo.
@@ -575,6 +812,12 @@ class GeneradorReporteExcel:
 
             id_ejecucion:
                 Identificador único de la ejecución actual.
+
+            resultados_conciliacion:
+                Detalle generado por ConciliadorMovimientos.
+
+            resumen_conciliacion:
+                Cantidades generales obtenidas durante la conciliación.
 
         Returns:
             Path:
@@ -598,6 +841,12 @@ class GeneradorReporteExcel:
             raise ValueError(
                 "El ID de ejecución no puede estar vacío."
             )
+
+        if resultados_conciliacion is None:
+            resultados_conciliacion = []
+
+        if resumen_conciliacion is None:
+            resumen_conciliacion = {}
 
         # Limpiamos el ID para evitar caracteres inválidos
         # dentro del nombre del archivo.
@@ -643,6 +892,12 @@ class GeneradorReporteExcel:
             libro=libro,
             id_ejecucion=id_ejecucion,
             cantidad_movimientos=len(movimientos),
+            resumen_conciliacion=resumen_conciliacion,
+        )
+
+        self._crear_hoja_conciliacion(
+            libro=libro,
+            resultados_conciliacion=resultados_conciliacion,
         )
 
         # Dejamos Movimientos como hoja activa al abrir el archivo.

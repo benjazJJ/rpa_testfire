@@ -203,7 +203,7 @@ class ConciliadorMovimientos:
                 texto = texto.replace(",", "")
 
         try:
-            return Decimal(texto).quantize(Decimal("0.01"))
+            return Decimal(texto)
         except InvalidOperation as error:
             raise ValueError(
                 f"El monto '{valor}' no tiene un formato válido."

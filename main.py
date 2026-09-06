@@ -12,16 +12,18 @@ Flujo actual:
 7. Guardar y subir la evidencia del login.
 8. Abrir la sección de actividad de la cuenta.
 9. Extraer los movimientos de la tabla.
-10. Generar un reporte Excel con los movimientos.
-11. Subir el reporte Excel a Google Drive.
-12. Registrar cada acción en Google Sheets.
-13. Mantener Firefox abierto hasta presionar ENTER.
-14. Cerrar Firefox de manera segura.
+10. Conciliar los movimientos con el archivo maestro local.
+11. Generar un reporte Excel con movimientos y conciliación.
+12. Subir el reporte Excel a Google Drive.
+13. Registrar cada acción en Google Sheets.
+14. Mantener Firefox abierto hasta presionar ENTER.
+15. Cerrar Firefox de manera segura.
 """
 
 import getpass
 import time
 
+from src.conciliacion import ConciliadorMovimientos
 from src.excel_report import GeneradorReporteExcel
 from src.google_drive import GoogleDriveEvidencias
 from src.google_sheets import GoogleSheetsAuditoria
@@ -79,10 +81,19 @@ def main():
     estado_login = "No ejecutado"
     estado_actividad = "No ejecutado"
     estado_extraccion = "No ejecutado"
+    estado_conciliacion = "No ejecutado"
     estado_excel = "No ejecutado"
 
     # Cantidad de movimientos obtenidos desde TestFire.
     cantidad_movimientos = 0
+
+    # Valores iniciales de la conciliación. Se definen antes del
+    # bloque try para poder mostrarlos de forma segura en el resumen.
+    resultados_conciliacion = []
+    resumen_conciliacion = {
+        "conciliados": 0,
+        "no_conciliados": 0,
+    }
 
     try:
         # PASO 1: ABRIR DEMO TESTFIRE
@@ -312,11 +323,58 @@ def main():
                     evidencia_drive=enlace_extraccion,
                 )
 
-                # PASO 5: GENERAR REPORTE EXCEL
-
-                # El reporte solamente se genera cuando la
-                # extracción de movimientos fue exitosa.
+                # Los pasos posteriores solamente se ejecutan cuando
+                # la extracción de movimientos fue exitosa.
                 if exito_extraccion:
+                    # PASO 5: CONCILIAR MOVIMIENTOS
+
+                    paso_actual = "Conciliar movimientos"
+                    inicio_paso = time.perf_counter()
+
+                    # El conciliador compara los movimientos obtenidos
+                    # desde TestFire con data/entrada/
+                    # conciliacion_master.xlsx.
+                    conciliador = ConciliadorMovimientos()
+
+                    (
+                        resultados_conciliacion,
+                        resumen_conciliacion,
+                    ) = conciliador.conciliar(movimientos)
+
+                    # Una conciliación puede ejecutarse correctamente y
+                    # aun así encontrar diferencias de negocio. Por eso
+                    # distinguimos "Con diferencias" de un error técnico.
+                    if resumen_conciliacion["no_conciliados"] == 0:
+                        estado_conciliacion = "Exitoso"
+                    else:
+                        estado_conciliacion = "Con diferencias"
+
+                    detalle_conciliacion = (
+                        "Conciliación completada. "
+                        f"Conciliados: "
+                        f"{resumen_conciliacion['conciliados']} | "
+                        f"Con diferencias: "
+                        f"{resumen_conciliacion['con_diferencias']} | "
+                        f"Solo en TestFire: "
+                        f"{resumen_conciliacion['solo_testfire']} | "
+                        f"Solo en maestro: "
+                        f"{resumen_conciliacion['solo_maestro']}"
+                    )
+
+                    # El evento deja evidencia numérica del resultado
+                    # aun antes de generar y subir el reporte Excel.
+                    auditoria.registrar_evento(
+                        id_ejecucion=id_ejecucion,
+                        modulo="Conciliación",
+                        accion=paso_actual,
+                        estado=estado_conciliacion,
+                        detalle=detalle_conciliacion,
+                        tiempo_inicio=inicio_paso,
+                        registros=len(resultados_conciliacion),
+                    )
+
+                    # PASO 6: GENERAR REPORTE EXCEL
+
                     paso_actual = "Generar reporte Excel"
                     inicio_paso = time.perf_counter()
 
@@ -328,6 +386,12 @@ def main():
                     ruta_reporte = generador_excel.generar_reporte(
                         movimientos=movimientos,
                         id_ejecucion=id_ejecucion,
+                        resultados_conciliacion=(
+                            resultados_conciliacion
+                        ),
+                        resumen_conciliacion=(
+                            resumen_conciliacion
+                        ),
                     )
 
                     # Subimos el mismo reporte a Google Drive para
@@ -390,6 +454,15 @@ def main():
         print(f"Actividad de cuenta: {estado_actividad}")
         print(f"Extracción de movimientos: {estado_extraccion}")
         print(f"Movimientos encontrados: {cantidad_movimientos}")
+        print(f"Conciliación: {estado_conciliacion}")
+        print(
+            "Movimientos conciliados: "
+            f"{resumen_conciliacion['conciliados']}"
+        )
+        print(
+            "Movimientos no conciliados: "
+            f"{resumen_conciliacion['no_conciliados']}"
+        )
         print(f"Reporte Excel: {estado_excel}")
 
         # Permite revisar visualmente la última página antes
