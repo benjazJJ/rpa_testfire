@@ -22,6 +22,7 @@ class GoogleDriveEvidencias:
         self.configuracion = self._cargar_configuracion()
         self.carpeta_id = self.configuracion["google"]["drive_folder_id"]
         self.servicio = self._conectar()
+        self.archivos_subidos = {}
 
     def _cargar_configuracion(self):
         ruta_config = self.raiz_proyecto / "config" / "config.json"
@@ -134,5 +135,29 @@ class GoogleDriveEvidencias:
         )
 
         print(f"[DRIVE] Archivo subido: {archivo['name']}")
+        self.archivos_subidos[ruta_archivo.resolve()] = archivo["id"]
 
+        return archivo.get("webViewLink", "")
+
+    def actualizar_archivo(self, ruta_archivo):
+        """Actualiza la copia de esta ejecución conservando su ID y enlace."""
+        ruta_archivo = Path(ruta_archivo).resolve()
+        archivo_id = self.archivos_subidos.get(ruta_archivo)
+        if archivo_id is None:
+            return self.subir_archivo(ruta_archivo)
+        if not ruta_archivo.is_file():
+            raise FileNotFoundError(f"No se encontró el archivo: {ruta_archivo}")
+        tipo_mime, _ = mimetypes.guess_type(str(ruta_archivo))
+        contenido = MediaFileUpload(
+            str(ruta_archivo),
+            mimetype=tipo_mime or "application/octet-stream",
+            resumable=False,
+        )
+        archivo = self.servicio.files().update(
+            fileId=archivo_id,
+            media_body=contenido,
+            fields="id,name,webViewLink",
+            supportsAllDrives=True,
+        ).execute()
+        print(f"[DRIVE] Estado final actualizado: {archivo['name']}")
         return archivo.get("webViewLink", "")

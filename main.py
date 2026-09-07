@@ -24,13 +24,14 @@ Flujo actual:
 
 import getpass
 import time
+from selenium.common.exceptions import InvalidSessionIdException, NoSuchWindowException
 
 from src.conciliacion import ConciliadorMovimientos
 from src.excel_report import GeneradorReporteExcel
 from src.google_drive import GoogleDriveEvidencias
 from src.google_sheets import GoogleSheetsAuditoria
 from src.logs import RegistroHttpWebhook
-from src.navegador import NavegadorTestFire
+from src.navegador import FirefoxCerradoError, NavegadorTestFire
 from src.notificaciones import NotificadorGmail
 from src.testfire_bot import TestFireBot
 
@@ -92,6 +93,13 @@ def main():
 
     # Cantidad de movimientos obtenidos desde TestFire.
     cantidad_movimientos = 0
+    movimientos = []
+    robot = None
+    ruta_reporte = None
+    enlace_reporte = ""
+    ultima_etapa = "Ninguna"
+    proceso_terminado = False
+    cierre_detectado = False
 
     # Valores iniciales de la conciliación. Se definen antes del
     # bloque try para poder mostrarlos de forma segura en el resumen.
@@ -101,9 +109,48 @@ def main():
         "no_conciliados": 0,
     }
 
+    def enviar_correo_final(estado_proceso, cantidad):
+        """Notifica una sola vez, después de guardar el estado definitivo."""
+        inicio_correo = time.perf_counter()
+        try:
+            notificador = NotificadorGmail()
+            exito, detalle = notificador.enviar_reporte(
+                destinatario=notificador.destinatarios_configurados,
+                ruta_reporte=ruta_reporte,
+                id_ejecucion=id_ejecucion,
+                estado_conciliacion=estado_conciliacion,
+                cantidad_movimientos=cantidad,
+                enlace_drive=enlace_reporte,
+                estado_proceso=estado_proceso,
+            )
+        except Exception as error_correo:
+            exito = False
+            detalle = (
+                "No fue posible completar la notificación por correo. "
+                f"Tipo de error: {type(error_correo).__name__}."
+            )
+            print(f"[GMAIL] {detalle}")
+        estado = "Exitoso" if exito else "Fallido"
+        try:
+            auditoria.registrar_evento(
+                id_ejecucion=id_ejecucion,
+                modulo="Notificaciones",
+                accion="Enviar reporte por correo",
+                estado=estado,
+                detalle=detalle,
+                tiempo_inicio=inicio_correo,
+                registros=cantidad,
+                evidencia_drive=enlace_reporte,
+            )
+        except Exception as error_auditoria:
+            print(f"[AUDITORÍA] No se pudo registrar el correo: {type(error_auditoria).__name__}.")
+        return estado
+
     try:
         # PASO 1: ABRIR DEMO TESTFIRE
 
+        navegador.verificar_abierto()
+        ultima_etapa = paso_actual
         paso_actual = "Abrir Demo TestFire"
         inicio_paso = time.perf_counter()
 
@@ -136,6 +183,8 @@ def main():
 
         # PASO 2: INICIAR SESIÓN
 
+        navegador.verificar_abierto()
+        ultima_etapa = paso_actual
         paso_actual = "Iniciar sesión"
         # TestFireBot utiliza el mismo Firefox que fue iniciado
         # por NavegadorTestFire.
@@ -146,6 +195,7 @@ def main():
         numero_intento = 0
 
         while True:
+            navegador.verificar_abierto()
             # Una contraseña vacía no se envía al sitio.
             if not contrasena:
                 print(
@@ -242,6 +292,8 @@ def main():
         # La actividad bancaria solamente puede consultarse
         # cuando el inicio de sesión fue exitoso.
         if exito_login:
+            navegador.verificar_abierto()
+            ultima_etapa = paso_actual
             paso_actual = "Abrir actividad de cuenta"
             inicio_paso = time.perf_counter()
 
@@ -285,6 +337,8 @@ def main():
             # La extracción solamente se ejecuta si la página
             # de actividad fue cargada correctamente.
             if exito_actividad:
+                navegador.verificar_abierto()
+                ultima_etapa = paso_actual
                 paso_actual = "Extraer movimientos"
                 inicio_paso = time.perf_counter()
 
@@ -334,6 +388,8 @@ def main():
                 if exito_extraccion:
                     # PASO 5: CONCILIAR MOVIMIENTOS
 
+                    navegador.verificar_abierto()
+                    ultima_etapa = paso_actual
                     paso_actual = "Conciliar movimientos"
                     inicio_paso = time.perf_counter()
 
@@ -381,6 +437,8 @@ def main():
 
                     # PASO 6: GENERAR REPORTE EXCEL
 
+                    navegador.verificar_abierto()
+                    ultima_etapa = paso_actual
                     paso_actual = "Generar reporte Excel"
                     inicio_paso = time.perf_counter()
 
@@ -390,6 +448,8 @@ def main():
 
                     # El archivo se guarda localmente en data/salida.
                     ruta_reporte = generador_excel.generar_reporte(
+                        estado_proceso="EN CURSO",
+                        ultima_etapa=ultima_etapa,
                         movimientos=movimientos,
                         id_ejecucion=id_ejecucion,
                         resultados_conciliacion=(
@@ -425,68 +485,10 @@ def main():
                         evidencia_drive=enlace_reporte,
                     )
 
-                    # PASO 7: ENVIAR REPORTE MEDIANTE GMAIL API
-
-                    paso_actual = "Enviar reporte por correo"
-                    inicio_paso = time.perf_counter()
-
-                    try:
-                        # NotificadorGmail utiliza el mismo cliente OAuth
-                        # que Drive, pero conserva su propio token y permiso.
-                        notificador = NotificadorGmail()
-
-                        # Los destinatarios se obtienen desde config.json.
-                        # Esto permite cambiarlos sin modificar main.py.
-                        exito_correo, detalle_correo = (
-                            notificador.enviar_reporte(
-                                destinatario=(
-                                    notificador
-                                    .destinatarios_configurados
-                                ),
-                                ruta_reporte=ruta_reporte,
-                                id_ejecucion=id_ejecucion,
-                                estado_conciliacion=(
-                                    estado_conciliacion
-                                ),
-                                cantidad_movimientos=(
-                                    cantidad_movimientos
-                                ),
-                                enlace_drive=enlace_reporte,
-                            )
-                        )
-
-                    except Exception as error_correo:
-                        # Una falla en Gmail no elimina el reporte ni impide
-                        # registrar el resto de la ejecución. Tampoco se
-                        # incluyen tokens o contraseñas en este detalle.
-                        exito_correo = False
-                        detalle_correo = (
-                            "No fue posible completar la notificación "
-                            "por correo. "
-                            f"Tipo de error: "
-                            f"{type(error_correo).__name__}."
-                        )
-                        print(f"[GMAIL] {detalle_correo}")
-
-                    estado_correo = (
-                        "Exitoso" if exito_correo else "Fallido"
-                    )
-
-                    # Google Sheets conserva el resultado del correo y el
-                    # enlace al mismo reporte que fue enviado como adjunto.
-                    auditoria.registrar_evento(
-                        id_ejecucion=id_ejecucion,
-                        modulo="Notificaciones",
-                        accion=paso_actual,
-                        estado=estado_correo,
-                        detalle=detalle_correo,
-                        tiempo_inicio=inicio_paso,
-                        registros=cantidad_movimientos,
-                        evidencia_drive=enlace_reporte,
-                    )
-
                     # PASO 8: ENVIAR RESUMEN MEDIANTE HTTP POST
 
+                    navegador.verificar_abierto()
+                    ultima_etapa = paso_actual
                     paso_actual = "Enviar resumen HTTP"
                     inicio_paso = time.perf_counter()
 
@@ -588,6 +590,23 @@ def main():
                 "porque el inicio de sesión no fue exitoso."
             )
 
+        navegador.verificar_abierto()
+        if ruta_reporte is not None:
+            GeneradorReporteExcel().actualizar_estado(
+                ruta_reporte, "COMPLETADO", "", paso_actual,
+            )
+            try:
+                drive.actualizar_archivo(ruta_reporte)
+            except Exception as error_drive:
+                print(
+                    "[DRIVE] El Excel local tiene el estado final, pero no se pudo "
+                    "actualizar la copia de Drive. "
+                    f"Tipo de error: {type(error_drive).__name__}."
+                )
+        proceso_terminado = True
+        if ruta_reporte is not None:
+            estado_correo = enviar_correo_final("COMPLETADO", cantidad_movimientos)
+
         # RESUMEN FINAL
 
         print("")
@@ -619,6 +638,58 @@ def main():
         )
 
     except Exception as error:
+        cierre_detectado = isinstance(
+            error, (FirefoxCerradoError, InvalidSessionIdException, NoSuchWindowException)
+        )
+        if not cierre_detectado and not proceso_terminado:
+            try:
+                navegador.verificar_abierto()
+            except FirefoxCerradoError:
+                cierre_detectado = True
+            except Exception:
+                pass  # Un error distinto no demuestra que Firefox se cerró.
+        if cierre_detectado and not proceso_terminado:
+            motivo = "Firefox se cerró antes de completar la ejecución."
+            print("\nPROCESO NO TERMINADO")
+            print(motivo)
+            print(f"Etapa interrumpida: {paso_actual}")
+            try:
+                generador = GeneradorReporteExcel()
+                if ruta_reporte is not None:
+                    generador.actualizar_estado(
+                        ruta_reporte, "INCOMPLETO", motivo, ultima_etapa,
+                    )
+                else:
+                    avance = movimientos or (
+                        robot.movimientos_extraidos if robot is not None else []
+                    )
+                    ruta_reporte = generador.generar_reporte(
+                        movimientos=avance,
+                        id_ejecucion=id_ejecucion,
+                        resultados_conciliacion=resultados_conciliacion,
+                        resumen_conciliacion=resumen_conciliacion,
+                        estado_proceso="INCOMPLETO",
+                        motivo=motivo,
+                        ultima_etapa=ultima_etapa,
+                    )
+                print(f"Se guardó el avance disponible en el archivo Excel: {ruta_reporte}")
+                try:
+                    enlace_reporte = drive.actualizar_archivo(ruta_reporte)
+                except Exception as error_drive:
+                    print(
+                        "[DRIVE] El aviso se guardó localmente, pero no se pudo "
+                        "guardar en Drive. "
+                        f"Tipo de error: {type(error_drive).__name__}."
+                    )
+            except Exception as error_excel:
+                print(f"[EXCEL] No se pudo guardar el aviso: {error_excel}")
+            else:
+                cantidad_avance = len(movimientos or (
+                    robot.movimientos_extraidos if robot is not None else []
+                ))
+                estado_correo = enviar_correo_final("INCOMPLETO", cantidad_avance)
+            return
+
         # Este bloque captura errores técnicos que no hayan sido
         # controlados por las clases.
         auditoria.registrar_evento(
@@ -644,7 +715,11 @@ def main():
     finally:
         # Este bloque siempre se ejecuta, tanto si el proceso
         # termina correctamente como si ocurre un error.
-        navegador.cerrar()
+        try:
+            navegador.cerrar()
+        except Exception:
+            if not cierre_detectado:
+                raise
 
 
 if __name__ == "__main__":

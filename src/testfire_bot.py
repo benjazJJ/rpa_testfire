@@ -40,6 +40,7 @@ class TestFireBot:
         """
 
         self.navegador = navegador
+        self.movimientos_extraidos = []
         self.driver = navegador.driver
         self.tiempo_espera = tiempo_espera
 
@@ -599,6 +600,7 @@ class TestFireBot:
 
             # Aquí almacenaremos cada movimiento extraído.
             movimientos = []
+            self.movimientos_extraidos = movimientos
 
             # El ciclo for permite procesar cada fila individualmente.
             for fila in filas:

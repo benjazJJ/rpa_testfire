@@ -295,6 +295,7 @@ class NotificadorGmail:
         estado_conciliacion: str,
         cantidad_movimientos: int,
         enlace_drive: str = "",
+        estado_proceso: str = "COMPLETADO",
     ) -> tuple[bool, str]:
         """
         Envía el reporte Excel y un resumen de la ejecución.
@@ -325,6 +326,8 @@ class NotificadorGmail:
                 contrario, ``False`` y una descripción apta para auditoría.
         """
 
+        if estado_proceso not in ("COMPLETADO", "INCOMPLETO"):
+            raise ValueError("El correo requiere un estado final del proceso.")
         correos_destino = self._validar_destinatarios(destinatario)
         archivo_reporte = Path(ruta_reporte).resolve()
 
@@ -340,15 +343,18 @@ class NotificadorGmail:
         # correctamente varios destinatarios en el encabezado "Para".
         mensaje["To"] = ", ".join(correos_destino)
         mensaje["Subject"] = (
-            f"Reporte RPA Demo TestFire - {id_ejecucion}"
+            f"Reporte RPA Demo TestFire - {estado_proceso} - {id_ejecucion}"
         )
 
         cuerpo = [
             "Hola:",
             "",
-            "El RPA Demo TestFire finalizó el procesamiento.",
+            ("El RPA Demo TestFire fue interrumpido. El reporte contiene el avance disponible."
+             if estado_proceso == "INCOMPLETO" else
+             "El RPA Demo TestFire finalizó el procesamiento."),
             "",
             f"ID de ejecución: {id_ejecucion}",
+            f"Estado del proceso: {estado_proceso}",
             f"Movimientos extraídos: {cantidad_movimientos}",
             f"Resultado de conciliación: {estado_conciliacion}",
         ]

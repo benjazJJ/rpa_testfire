@@ -19,7 +19,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -802,6 +802,9 @@ class GeneradorReporteExcel:
         id_ejecucion: str,
         resultados_conciliacion: list[dict[str, Any]] | None = None,
         resumen_conciliacion: dict[str, int] | None = None,
+        estado_proceso: str = "COMPLETADO",
+        motivo: str = "",
+        ultima_etapa: str = "Generación del reporte",
     ) -> Path:
         """
         Genera y guarda el reporte Excel completo.
@@ -905,6 +908,11 @@ class GeneradorReporteExcel:
             "Movimientos"
         )
 
+        self._crear_hoja_estado(libro, estado_proceso, motivo, ultima_etapa)
+        if estado_proceso == "INCOMPLETO" and not resultados_conciliacion:
+            for fila in range(15, 21):
+                libro["Resumen"].cell(fila, 2, "No evaluado")
+
         # Guardamos el archivo en data/salida.
         libro.save(ruta_archivo)
 
@@ -913,3 +921,39 @@ class GeneradorReporteExcel:
         )
 
         return ruta_archivo
+
+    def _crear_hoja_estado(self, libro, estado, motivo, ultima_etapa):
+        if "Estado del proceso" in libro.sheetnames:
+            del libro["Estado del proceso"]
+        hoja = libro.create_sheet("Estado del proceso", 0)
+        for fila in (
+            ("Campo", "Detalle"),
+            ("Estado", estado),
+            ("Motivo", motivo),
+            ("Fecha y hora", datetime.now()),
+            ("Última etapa completada", ultima_etapa),
+            ("Observación", "Resultados parciales; requieren revisión."
+             if estado == "INCOMPLETO" else
+             "Ejecución en curso." if estado == "EN CURSO" else "Proceso terminado."),
+        ):
+            hoja.append(fila)
+        hoja["B4"].number_format = "yyyy-mm-dd hh:mm:ss"
+        hoja.column_dimensions["A"].width = 30
+        hoja.column_dimensions["B"].width = 85
+        for fila in hoja:
+            fila[0].font = Font(bold=True)
+            fila[1].alignment = Alignment(wrap_text=True, vertical="top")
+        hoja["B2"].fill = PatternFill(
+            fill_type="solid",
+            fgColor=self.color_verde if estado == "COMPLETADO" else self.color_amarillo,
+        )
+        libro.active = libro.sheetnames.index("Estado del proceso")
+
+    def actualizar_estado(self, ruta, estado, motivo, ultima_etapa):
+        """Actualiza únicamente el estado del reporte local existente."""
+        libro = load_workbook(ruta)
+        try:
+            self._crear_hoja_estado(libro, estado, motivo, ultima_etapa)
+            libro.save(ruta)
+        finally:
+            libro.close()

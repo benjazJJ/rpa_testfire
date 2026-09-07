@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from selenium import webdriver
+from selenium.common.exceptions import InvalidSessionIdException, NoSuchWindowException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
@@ -19,6 +20,10 @@ Responsabilidades:
 - Capturar una evidencia.
 - Cerrar el navegador correctamente.
 """
+
+
+class FirefoxCerradoError(RuntimeError):
+    """La ventana o sesión de Firefox terminó antes de tiempo."""
 
 
 class NavegadorTestFire:
@@ -256,6 +261,18 @@ class NavegadorTestFire:
 
         return ruta_captura
 
+    def verificar_abierto(self):
+        """Comprueba la sesión entre etapas, sin abrir otra ventana."""
+        if self.driver is None:
+            return
+        try:
+            if not self.driver.window_handles:
+                raise FirefoxCerradoError("Firefox se cerró antes de completar la ejecución.")
+        except (InvalidSessionIdException, NoSuchWindowException) as error:
+            raise FirefoxCerradoError(
+                "Firefox se cerró antes de completar la ejecución."
+            ) from error
+
     def cerrar(self):
         """
         Cierra Firefox y finaliza GeckoDriver.
@@ -266,7 +283,10 @@ class NavegadorTestFire:
 
         if self.driver is not None:
             # quit() cierra todas las ventanas y termina GeckoDriver.
-            self.driver.quit()
+            try:
+                self.driver.quit()
+            except (InvalidSessionIdException, NoSuchWindowException):
+                pass
 
             # Restablecemos el atributo para indicar que ya no existe
             # una sesión activa.
