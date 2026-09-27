@@ -1,84 +1,165 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
   <head>
     <base target="_top">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
       :root {
-        --azul: #1a73e8;
-        --azul-oscuro: #1557b0;
-        --gris-texto: #202124;
-        --gris-suave: #5f6368;
-        --borde: #e0e0e0;
-        --fondo-app: #eef2f6;
-        --burbuja-bot: #ffffff;
-        --rojo: #d93025;
+        --acento: #2563eb;
+        --acento-fuerte: #1d4ed8;
+        --acento-suave: #eff4ff;
+
+        --texto: #101828;
+        --texto-medio: #475467;
+        --texto-debil: #98a2b3;
+
+        --borde: #e4e7ec;
+        --borde-fuerte: #d0d5dd;
+
+        --fondo-app: #f2f4f7;
+        --superficie: #ffffff;
+        --superficie-suave: #f9fafb;
+
+        --verde: #17b26a;
+        --rojo: #d92d20;
+        --rojo-fondo: #fef3f2;
+        --rojo-borde: #fecdc9;
+
+        --radio-lg: 20px;
+        --radio-md: 12px;
+        --radio-sm: 8px;
+
+        --sombra-card:
+          0 1px 2px rgba(16, 24, 40, 0.04),
+          0 12px 32px -8px rgba(16, 24, 40, 0.10);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --acento: #4d84f5;
+          --acento-fuerte: #3b73e8;
+          --acento-suave: #1b2438;
+
+          --texto: #e7eaf0;
+          --texto-medio: #a4adbd;
+          --texto-debil: #6c7686;
+
+          --borde: #232833;
+          --borde-fuerte: #2e3440;
+
+          --fondo-app: #0a0c11;
+          --superficie: #11141b;
+          --superficie-suave: #171b23;
+
+          --rojo: #f97066;
+          --rojo-fondo: #22181a;
+          --rojo-borde: #55302f;
+
+          --sombra-card:
+            0 1px 2px rgba(0, 0, 0, 0.4),
+            0 16px 40px -12px rgba(0, 0, 0, 0.6);
+        }
       }
 
       * {
         box-sizing: border-box;
       }
 
-      html, body {
+      html,
+      body {
         height: 100%;
         margin: 0;
       }
 
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        font-size: 14px;
         background: var(--fondo-app);
-        color: var(--gris-texto);
+        color: var(--texto);
         display: flex;
         justify-content: center;
-        padding: 24px 12px;
+        align-items: stretch;
+        padding: 24px 16px;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
       }
 
+      svg {
+        display: block;
+        flex-shrink: 0;
+      }
+
+      /* ---------- Contenedor ---------- */
+
       .chat-card {
+        position: relative;
         width: 100%;
-        max-width: 680px;
-        height: min(760px, 92vh);
-        background: #ffffff;
-        border-radius: 16px;
+        max-width: 760px;
+        max-height: 100%;
+        background: var(--superficie);
         border: 1px solid var(--borde);
-        box-shadow: 0 4px 16px rgba(32, 33, 36, 0.08);
+        border-radius: var(--radio-lg);
+        box-shadow: var(--sombra-card);
         display: flex;
         flex-direction: column;
         overflow: hidden;
       }
 
+      /* ---------- Cabecera ---------- */
+
       .chat-header {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 16px 20px;
-        border-bottom: 1px solid var(--borde);
+        padding: 14px 16px 14px 20px;
+        border-bottom: 1px solid transparent;
+        background: var(--superficie);
         flex-shrink: 0;
+        z-index: 2;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
       }
 
-      .avatar-bot {
-        width: 38px;
-        height: 38px;
+      .chat-card.desplazado .chat-header {
+        border-bottom-color: var(--borde);
+      }
+
+      .marca {
+        width: 36px;
+        height: 36px;
         border-radius: 10px;
-        background: var(--azul);
+        background: var(--acento);
+        color: #ffffff;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 19px;
         flex-shrink: 0;
       }
 
-      .chat-header h1 {
-        font-size: 15px;
+      .marca-texto {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .marca-texto h1 {
+        font-size: 14.5px;
         font-weight: 600;
+        letter-spacing: -0.01em;
         margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .estado-linea {
         display: flex;
         align-items: center;
-        gap: 5px;
+        gap: 6px;
         font-size: 12px;
-        color: var(--gris-suave);
+        color: var(--texto-medio);
         margin-top: 2px;
       }
 
@@ -86,71 +167,167 @@
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: #34a853;
+        background: var(--verde);
+        box-shadow: 0 0 0 3px rgba(23, 178, 106, 0.16);
         flex-shrink: 0;
       }
 
+      .btn-icono {
+        width: 34px;
+        height: 34px;
+        border: 1px solid transparent;
+        border-radius: var(--radio-sm);
+        background: transparent;
+        color: var(--texto-medio);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+      }
+
+      .btn-icono:hover:not(:disabled) {
+        background: var(--superficie-suave);
+        border-color: var(--borde);
+        color: var(--texto);
+      }
+
+      .btn-icono:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      /* ---------- Conversación ---------- */
+
       .chat-messages {
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
-        padding: 20px;
+        overscroll-behavior: contain;
+        padding: 24px 20px 8px;
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 18px;
+        scrollbar-width: thin;
+        scrollbar-color: var(--borde-fuerte) transparent;
       }
+
+      .chat-messages::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      .chat-messages::-webkit-scrollbar-thumb {
+        background-clip: padding-box;
+        background-color: var(--borde-fuerte);
+        border: 3px solid transparent;
+        border-radius: 999px;
+      }
+
+      .chat-messages::-webkit-scrollbar-thumb:hover {
+        background-color: var(--texto-debil);
+      }
+
+      /* ---------- Estado vacío ---------- */
 
       .estado-vacio {
         margin: auto 0;
-        text-align: center;
-        color: var(--gris-suave);
+        padding: 8px 0 20px;
+        animation: aparecer 0.3s ease-out both;
       }
 
       .estado-vacio .icono-grande {
-        font-size: 36px;
-        margin-bottom: 10px;
+        width: 44px;
+        height: 44px;
+        border-radius: var(--radio-md);
+        background: var(--acento-suave);
+        color: var(--acento);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+      }
+
+      .estado-vacio h2 {
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: -0.015em;
+        margin: 0 0 6px;
       }
 
       .estado-vacio p {
-        font-size: 13px;
-        margin: 0 0 16px;
+        font-size: 13.5px;
+        line-height: 1.5;
+        color: var(--texto-medio);
+        margin: 0 0 20px;
+        max-width: 46ch;
+      }
+
+      .etiqueta-seccion {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--texto-debil);
+        margin-bottom: 10px;
       }
 
       .chips {
-        display: flex;
-        flex-direction: column;
+        display: grid;
         gap: 8px;
-        align-items: center;
       }
 
       .chip {
-        background: var(--fondo-app);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        background: var(--superficie);
         border: 1px solid var(--borde);
-        border-radius: 18px;
-        padding: 9px 16px;
-        font-size: 13px;
-        color: var(--gris-texto);
-        cursor: pointer;
+        border-radius: var(--radio-md);
+        padding: 12px 14px;
+        font-family: inherit;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--texto);
         text-align: left;
-        max-width: 420px;
-        transition: background 0.15s, border-color 0.15s;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
       }
 
       .chip:hover {
-        background: #e8f0fe;
-        border-color: var(--azul);
+        background: var(--superficie-suave);
+        border-color: var(--borde-fuerte);
+        transform: translateY(-1px);
       }
+
+      .chip span {
+        flex: 1;
+      }
+
+      .chip svg {
+        color: var(--texto-debil);
+        transition: color 0.15s ease, transform 0.15s ease;
+      }
+
+      .chip:hover svg {
+        color: var(--acento);
+        transform: translateX(2px);
+      }
+
+      /* ---------- Mensajes ---------- */
 
       .fila-mensaje {
         display: flex;
-        gap: 10px;
-        max-width: 88%;
-        animation: aparecer 0.2s ease-out;
+        gap: 12px;
+        max-width: 92%;
+        animation: aparecer 0.24s ease-out both;
       }
 
       @keyframes aparecer {
         from {
           opacity: 0;
-          transform: translateY(6px);
+          transform: translateY(8px);
         }
         to {
           opacity: 1;
@@ -160,7 +337,7 @@
 
       .fila-usuario {
         align-self: flex-end;
-        flex-direction: row-reverse;
+        max-width: 84%;
       }
 
       .fila-bot {
@@ -170,101 +347,157 @@
       .avatar-mini {
         width: 28px;
         height: 28px;
-        border-radius: 8px;
+        border-radius: var(--radio-sm);
+        background: var(--acento);
+        color: #ffffff;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 14px;
+        margin-top: 2px;
         flex-shrink: 0;
       }
 
-      .avatar-mini.bot {
-        background: var(--azul);
-      }
-
-      .avatar-mini.usuario {
-        background: #5f6368;
+      .contenido-mensaje {
+        min-width: 0;
       }
 
       .burbuja {
-        padding: 11px 14px;
-        border-radius: 14px;
         font-size: 14px;
-        line-height: 1.55;
-        white-space: pre-wrap;
+        line-height: 1.6;
+        padding: 11px 14px;
+        border-radius: var(--radio-md);
         word-break: break-word;
+        overflow-wrap: anywhere;
       }
 
       .fila-usuario .burbuja {
-        background: var(--azul);
+        background: var(--acento);
         color: #ffffff;
-        border-bottom-right-radius: 4px;
+        border-top-right-radius: var(--radio-sm);
+        white-space: pre-wrap;
       }
 
       .fila-bot .burbuja {
-        background: var(--burbuja-bot);
+        background: var(--superficie-suave);
         border: 1px solid var(--borde);
-        border-bottom-left-radius: 4px;
+        border-top-left-radius: var(--radio-sm);
       }
 
       .fila-bot .burbuja.error {
-        border-color: var(--rojo);
-        background: #fdecea;
+        background: var(--rojo-fondo);
+        border-color: var(--rojo-borde);
         color: var(--rojo);
+      }
+
+      .burbuja .parrafo {
+        margin: 0;
+      }
+
+      .burbuja .parrafo + .parrafo,
+      .burbuja .parrafo + .linea-lista,
+      .burbuja .linea-lista + .linea-lista,
+      .burbuja .linea-lista + .parrafo {
+        margin-top: 7px;
+      }
+
+      .burbuja .linea-lista {
+        display: flex;
+        gap: 8px;
+      }
+
+      .burbuja .marca-lista {
+        color: var(--texto-debil);
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
       }
 
       .burbuja strong {
         font-weight: 600;
       }
 
-      .acciones-burbuja {
+      .burbuja code {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.88em;
+        background: rgba(16, 24, 40, 0.06);
+        border-radius: 5px;
+        padding: 1.5px 5px;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .burbuja code {
+          background: rgba(255, 255, 255, 0.08);
+        }
+      }
+
+      .fila-bot .burbuja.error code {
+        background: rgba(217, 45, 32, 0.10);
+      }
+
+      .pie-mensaje {
         display: flex;
-        justify-content: flex-start;
+        align-items: center;
+        gap: 10px;
         margin-top: 6px;
+        padding: 0 2px;
+        font-size: 11.5px;
+        color: var(--texto-debil);
+      }
+
+      .fila-usuario .pie-mensaje {
+        justify-content: flex-end;
       }
 
       .btn-copiar {
-        border: none;
-        background: none;
-        color: var(--gris-suave);
-        font-size: 11px;
-        cursor: pointer;
-        padding: 2px 4px;
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 5px;
+        border: none;
+        background: none;
+        padding: 0;
+        font-family: inherit;
+        font-size: 11.5px;
+        color: var(--texto-debil);
+        cursor: pointer;
+        transition: color 0.15s ease;
       }
 
       .btn-copiar:hover {
-        color: var(--azul);
+        color: var(--acento);
       }
+
+      .btn-copiar.copiado {
+        color: var(--verde);
+      }
+
+      /* ---------- Indicador de escritura ---------- */
 
       .puntos-escribiendo {
         display: flex;
-        gap: 3px;
-        padding: 4px 0;
+        align-items: center;
+        gap: 4px;
+        height: 22px;
       }
 
       .puntos-escribiendo span {
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: var(--gris-suave);
-        animation: rebotar 1.1s infinite ease-in-out;
+        background: var(--texto-debil);
+        animation: rebotar 1.2s infinite ease-in-out;
       }
 
       .puntos-escribiendo span:nth-child(2) {
-        animation-delay: 0.15s;
+        animation-delay: 0.16s;
       }
 
       .puntos-escribiendo span:nth-child(3) {
-        animation-delay: 0.3s;
+        animation-delay: 0.32s;
       }
 
       @keyframes rebotar {
         0%, 60%, 100% {
           transform: translateY(0);
-          opacity: 0.4;
+          opacity: 0.35;
         }
         30% {
           transform: translateY(-4px);
@@ -272,129 +505,263 @@
         }
       }
 
+      /* ---------- Composer ---------- */
+
       .chat-input-area {
-        border-top: 1px solid var(--borde);
-        padding: 12px 16px;
+        padding: 12px 20px 16px;
+        background: var(--superficie);
         flex-shrink: 0;
       }
 
-      .chat-input-row {
+      .composer {
         display: flex;
         align-items: flex-end;
-        gap: 10px;
+        gap: 8px;
+        background: var(--superficie);
+        border: 1px solid var(--borde-fuerte);
+        border-radius: 16px;
+        padding: 6px 6px 6px 14px;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .composer.enfocado {
+        border-color: var(--acento);
+        box-shadow: 0 0 0 3.5px rgba(37, 99, 235, 0.12);
       }
 
       textarea {
         flex: 1;
+        min-width: 0;
+        height: 24px;
+        max-height: 152px;
         resize: none;
-        border: 1px solid var(--borde);
-        border-radius: 20px;
-        padding: 10px 16px;
+        -webkit-appearance: none;
+        appearance: none;
+        border: none;
+        outline: none;
+        background: transparent;
+        color: var(--texto);
         font-family: inherit;
         font-size: 14px;
-        line-height: 1.4;
-        max-height: 120px;
-        transition: border-color 0.15s, box-shadow 0.15s;
+        line-height: 1.5;
+        padding: 7px 0;
+        scrollbar-width: thin;
       }
 
-      textarea:focus {
-        outline: none;
-        border-color: var(--azul);
-        box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
+      textarea::placeholder {
+        color: var(--texto-debil);
+      }
+
+      textarea::-webkit-resizer {
+        display: none;
+      }
+
+      /* Oculta íconos que algunas extensiones (correctores, IA, etc.)
+         inyectan dentro de los campos de texto. */
+      textarea::-webkit-textfield-decoration-container,
+      textarea::-webkit-caps-lock-indicator,
+      textarea::-webkit-contacts-auto-fill-button,
+      textarea::-webkit-credentials-auto-fill-button {
+        display: none !important;
+        visibility: hidden !important;
+      }
+
+      grammarly-extension,
+      grammarly-desktop-integration {
+        display: none !important;
       }
 
       .btn-enviar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
+        width: 34px;
+        height: 34px;
         border: none;
-        background: var(--azul);
+        border-radius: 10px;
+        background: var(--acento);
         color: #ffffff;
-        font-size: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         flex-shrink: 0;
-        transition: background 0.15s;
+        transition: background 0.15s ease, opacity 0.15s ease;
       }
 
       .btn-enviar:hover:not(:disabled) {
-        background: var(--azul-oscuro);
+        background: var(--acento-fuerte);
       }
 
       .btn-enviar:disabled {
-        background: #c1c1c1;
-        cursor: not-allowed;
+        background: var(--borde-fuerte);
+        color: var(--texto-debil);
+        cursor: default;
       }
 
-      .pista-envio {
-        font-size: 11px;
-        color: var(--gris-suave);
-        text-align: right;
-        margin-top: 4px;
-        padding-right: 4px;
+      .pie-composer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 8px;
+        padding: 0 4px;
+        font-size: 11.5px;
+        color: var(--texto-debil);
+      }
+
+      kbd {
+        font-family: inherit;
+        font-size: 10.5px;
+        font-weight: 500;
+        background: var(--superficie-suave);
+        border: 1px solid var(--borde);
+        border-radius: 5px;
+        padding: 1px 5px;
+        color: var(--texto-medio);
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--acento);
+        outline-offset: 2px;
+      }
+
+      /* ---------- Responsive ---------- */
+
+      @media (max-width: 640px) {
+        body {
+          padding: 0;
+        }
+
+        .chat-card {
+          border: none;
+          border-radius: 0;
+          box-shadow: none;
+          max-width: none;
+        }
+
+        .chat-messages {
+          padding: 18px 16px 4px;
+        }
+
+        .chat-input-area {
+          padding: 10px 14px 14px;
+        }
+
+        .fila-mensaje {
+          max-width: 100%;
+        }
+
+        .fila-usuario {
+          max-width: 92%;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
       }
     </style>
   </head>
   <body>
-    <div class="chat-card">
-      <div class="chat-header">
-        <div class="avatar-bot">🤖</div>
-        <div>
+    <main class="chat-card" id="tarjeta">
+      <header class="chat-header">
+        <div class="marca" aria-hidden="true">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="8" width="16" height="12" rx="3"></rect>
+            <path d="M12 8V4.5"></path>
+            <circle cx="12" cy="3" r="1.2" fill="currentColor" stroke="none"></circle>
+            <path d="M9.2 13.2v1.6M14.8 13.2v1.6"></path>
+          </svg>
+        </div>
+        <div class="marca-texto">
           <h1>Asistente RPA TestFire</h1>
           <div class="estado-linea">
-            <span class="punto-activo"></span>
-            <span>Conectado</span>
+            <span class="punto-activo" aria-hidden="true"></span>
+            <span id="textoEstado">En línea · Soporte técnico</span>
           </div>
         </div>
-      </div>
+        <button class="btn-icono" id="btnReiniciar" type="button" title="Nueva conversación" aria-label="Nueva conversación" disabled>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+            <path d="M3 4.5V9h4.5"></path>
+          </svg>
+        </button>
+      </header>
 
-      <div class="chat-messages" id="mensajes">
-        <div class="estado-vacio" id="estadoVacio">
-          <div class="icono-grande">🛠️</div>
-          <p>Describe un error del RPA o elige un ejemplo:</p>
-          <div class="chips">
-            <div class="chip" onclick="usarEjemplo(this)">El login falló con "Login Failed" después de 3 intentos</div>
-            <div class="chip" onclick="usarEjemplo(this)">Firefox no inicia y no se genera captura de pantalla</div>
-            <div class="chip" onclick="usarEjemplo(this)">La conciliación marca movimientos como no encontrados</div>
-          </div>
-        </div>
-      </div>
+      <div class="chat-messages" id="mensajes" role="log" aria-live="polite" aria-label="Conversación"></div>
 
       <div class="chat-input-area">
-        <div class="chat-input-row">
-          <textarea id="pregunta" rows="1" placeholder="Describe el error o el paso donde ocurrió..."></textarea>
-          <button class="btn-enviar" id="btnEnviar" onclick="enviarPregunta()">➤</button>
+        <div class="composer" id="composer">
+          <textarea
+            id="pregunta"
+            rows="1"
+            placeholder="Describe el error o el paso donde ocurrió…"
+            aria-label="Escribe tu consulta"
+            autocomplete="off"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="off"
+            data-gramm="false"
+            data-gramm_editor="false"
+            data-enable-grammarly="false"
+          ></textarea>
+          <button class="btn-enviar" id="btnEnviar" type="button" aria-label="Enviar consulta" disabled>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19V5"></path>
+              <path d="M5.5 11.5 12 5l6.5 6.5"></path>
+            </svg>
+          </button>
         </div>
-        <div class="pista-envio">⌘/Ctrl + Enter para enviar</div>
+        <div class="pie-composer">
+          <span><kbd>Enter</kbd> enviar · <kbd>Shift</kbd> + <kbd>Enter</kbd> nueva línea</span>
+          <span id="contadorMensajes"></span>
+        </div>
       </div>
-    </div>
+    </main>
 
     <script>
+      const ICONOS = {
+        bot:
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<rect x="4" y="8" width="16" height="12" rx="3"></rect>' +
+          '<path d="M12 8V5"></path><path d="M9.2 13.2v1.6M14.8 13.2v1.6"></path></svg>',
+        copiar:
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<rect x="9" y="9" width="11" height="11" rx="2.5"></rect>' +
+          '<path d="M5.5 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v.5"></path></svg>',
+        verificado:
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M4.5 12.5 9 17l10.5-10.5"></path></svg>',
+        flecha:
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M5 12h13"></path><path d="M12.5 5.5 19 12l-6.5 6.5"></path></svg>',
+        herramienta:
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M14.2 6.2a3.8 3.8 0 0 1 5.2 4.9l-8.1 8.1a2.4 2.4 0 0 1-3.4-3.4l7.3-7.3"></path>' +
+          '<path d="M6.5 4 4 6.5 7 9.5"></path></svg>',
+      };
+
+      const EJEMPLOS = [
+        'El login falló con "Login Failed" después de 3 intentos',
+        'Firefox no inicia y no se genera captura de pantalla',
+        'La conciliación marca movimientos como "Solo en maestro"',
+      ];
+
+      const tarjeta = document.getElementById('tarjeta');
       const mensajesDiv = document.getElementById('mensajes');
-      const estadoVacio = document.getElementById('estadoVacio');
       const textarea = document.getElementById('pregunta');
+      const composer = document.getElementById('composer');
       const btnEnviar = document.getElementById('btnEnviar');
+      const btnReiniciar = document.getElementById('btnReiniciar');
+      const textoEstado = document.getElementById('textoEstado');
+      const contadorMensajes = document.getElementById('contadorMensajes');
 
       let enviando = false;
       let contadorId = 0;
+      let totalConsultas = 0;
 
-      textarea.addEventListener('input', function () {
-        textarea.style.height = 'auto';
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-      });
-
-      textarea.addEventListener('keydown', function (evento) {
-        if ((evento.metaKey || evento.ctrlKey) && evento.key === 'Enter') {
-          enviarPregunta();
-        }
-      });
-
-      function usarEjemplo(elemento) {
-        textarea.value = elemento.textContent;
-        enviarPregunta();
-      }
+      /* ---------- Utilidades ---------- */
 
       function escaparHtml(texto) {
         const div = document.createElement('div');
@@ -402,20 +769,97 @@
         return div.innerHTML;
       }
 
+      function formatearEnLinea(texto) {
+        return escaparHtml(texto)
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/`([^`]+)`/g, '<code>$1</code>');
+      }
+
+      /**
+       * El modelo responde en líneas numeradas o con guiones. Cada línea se
+       * renderiza como bloque propio para que la lista quede alineada en vez
+       * de depender de saltos de línea sueltos.
+       */
       function formatearRespuesta(texto) {
-        return escaparHtml(texto).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        const lineas = String(texto).split('\n');
+        let html = '';
+
+        lineas.forEach(function (linea) {
+          const limpia = linea.trim();
+          if (!limpia) return;
+
+          const lista = limpia.match(/^(\d{1,2}[.)]|[-*•])\s+(.*)$/);
+
+          if (lista) {
+            const marca = /^[-*•]$/.test(lista[1]) ? '•' : lista[1];
+            html +=
+              '<div class="linea-lista">' +
+              '<span class="marca-lista">' + escaparHtml(marca) + '</span>' +
+              '<span>' + formatearEnLinea(lista[2]) + '</span>' +
+              '</div>';
+          } else {
+            html += '<p class="parrafo">' + formatearEnLinea(limpia) + '</p>';
+          }
+        });
+
+        return html || '<p class="parrafo">' + formatearEnLinea(String(texto)) + '</p>';
+      }
+
+      function horaActual() {
+        return new Date().toLocaleTimeString('es-CL', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
       }
 
       function desplazarAbajo() {
         mensajesDiv.scrollTop = mensajesDiv.scrollHeight;
       }
 
+      function actualizarContador() {
+        contadorMensajes.textContent = totalConsultas
+          ? totalConsultas + (totalConsultas === 1 ? ' consulta' : ' consultas')
+          : '';
+      }
+
+      /* ---------- Estado vacío ---------- */
+
+      function mostrarEstadoVacio() {
+        const chips = EJEMPLOS.map(function (ejemplo) {
+          return (
+            '<button class="chip" type="button" data-ejemplo="1">' +
+            '<span>' + escaparHtml(ejemplo) + '</span>' +
+            ICONOS.flecha +
+            '</button>'
+          );
+        }).join('');
+
+        mensajesDiv.innerHTML =
+          '<div class="estado-vacio" id="estadoVacio">' +
+          '<div class="icono-grande">' + ICONOS.herramienta + '</div>' +
+          '<h2>¿Qué falló en la ejecución?</h2>' +
+          '<p>Describe el error, el mensaje exacto o el paso del RPA donde se detuvo. ' +
+          'Te indico el módulo responsable, la causa probable y cómo verificarlo.</p>' +
+          '<div class="etiqueta-seccion">Ejemplos frecuentes</div>' +
+          '<div class="chips">' + chips + '</div>' +
+          '</div>';
+      }
+
+      function quitarEstadoVacio() {
+        const estadoVacio = document.getElementById('estadoVacio');
+        if (estadoVacio) estadoVacio.remove();
+      }
+
+      /* ---------- Mensajes ---------- */
+
       function agregarMensajeUsuario(texto) {
         const fila = document.createElement('div');
         fila.className = 'fila-mensaje fila-usuario';
         fila.innerHTML =
-          '<div class="avatar-mini usuario">🧑</div>' +
-          '<div class="burbuja">' + escaparHtml(texto) + '</div>';
+          '<div class="contenido-mensaje">' +
+          '<div class="burbuja">' + escaparHtml(texto) + '</div>' +
+          '<div class="pie-mensaje"><span>' + horaActual() + '</span></div>' +
+          '</div>';
         mensajesDiv.appendChild(fila);
         desplazarAbajo();
       }
@@ -428,11 +872,13 @@
         fila.className = 'fila-mensaje fila-bot';
         fila.id = idFila;
         fila.innerHTML =
-          '<div class="avatar-mini bot">🤖</div>' +
-          '<div>' +
-            '<div class="burbuja">' +
-              '<div class="puntos-escribiendo"><span></span><span></span><span></span></div>' +
-            '</div>' +
+          '<div class="avatar-mini">' + ICONOS.bot + '</div>' +
+          '<div class="contenido-mensaje">' +
+          '<div class="burbuja">' +
+          '<div class="puntos-escribiendo" role="status" aria-label="Escribiendo respuesta">' +
+          '<span></span><span></span><span></span>' +
+          '</div>' +
+          '</div>' +
           '</div>';
         mensajesDiv.appendChild(fila);
         desplazarAbajo();
@@ -447,26 +893,76 @@
         burbuja.classList.toggle('error', !!esError);
         burbuja.innerHTML = formatearRespuesta(texto);
 
+        const pie = document.createElement('div');
+        pie.className = 'pie-mensaje';
+        pie.innerHTML = '<span>' + horaActual() + '</span>';
+
         if (!esError) {
-          const acciones = document.createElement('div');
-          acciones.className = 'acciones-burbuja';
-          acciones.innerHTML = '<button class="btn-copiar" onclick="copiarTexto(this)">📋 Copiar</button>';
-          acciones.querySelector('button').dataset.texto = texto;
-          fila.querySelector('div:nth-child(2)').appendChild(acciones);
+          const boton = document.createElement('button');
+          boton.type = 'button';
+          boton.className = 'btn-copiar';
+          boton.dataset.texto = texto;
+          boton.innerHTML = ICONOS.copiar + '<span>Copiar</span>';
+          pie.appendChild(boton);
         }
 
+        fila.querySelector('.contenido-mensaje').appendChild(pie);
         desplazarAbajo();
       }
 
-      function copiarTexto(boton) {
-        const texto = boton.dataset.texto;
-        navigator.clipboard.writeText(texto).then(function () {
-          const original = boton.textContent;
-          boton.textContent = '✓ Copiado';
-          setTimeout(function () {
-            boton.textContent = original;
-          }, 1500);
+      /* ---------- Copiar ---------- */
+
+      function copiarAlPortapapeles(texto) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          return navigator.clipboard.writeText(texto);
+        }
+
+        // El iframe de Apps Script puede bloquear la Clipboard API.
+        return new Promise(function (resolver, rechazar) {
+          const auxiliar = document.createElement('textarea');
+          auxiliar.value = texto;
+          auxiliar.setAttribute('readonly', '');
+          auxiliar.style.position = 'fixed';
+          auxiliar.style.opacity = '0';
+          document.body.appendChild(auxiliar);
+          auxiliar.select();
+
+          const exito = document.execCommand('copy');
+          document.body.removeChild(auxiliar);
+          exito ? resolver() : rechazar(new Error('No se pudo copiar.'));
         });
+      }
+
+      function manejarCopia(boton) {
+        copiarAlPortapapeles(boton.dataset.texto).then(function () {
+          boton.classList.add('copiado');
+          boton.innerHTML = ICONOS.verificado + '<span>Copiado</span>';
+
+          setTimeout(function () {
+            boton.classList.remove('copiado');
+            boton.innerHTML = ICONOS.copiar + '<span>Copiar</span>';
+          }, 1800);
+        });
+      }
+
+      /* ---------- Composer ---------- */
+
+      function ajustarAltura() {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 152) + 'px';
+      }
+
+      function actualizarBotonEnviar() {
+        btnEnviar.disabled = enviando || !textarea.value.trim();
+      }
+
+      function fijarEstadoEnvio(activo) {
+        enviando = activo;
+        textarea.readOnly = activo;
+        textoEstado.textContent = activo
+          ? 'Analizando tu consulta…'
+          : 'En línea · Soporte técnico';
+        actualizarBotonEnviar();
       }
 
       function enviarPregunta() {
@@ -478,32 +974,107 @@
           return;
         }
 
-        if (estadoVacio.parentNode) {
-          estadoVacio.remove();
-        }
-
+        quitarEstadoVacio();
         agregarMensajeUsuario(pregunta);
         const idFila = agregarBurbujaBotCargando();
 
         textarea.value = '';
-        textarea.style.height = 'auto';
-        enviando = true;
-        btnEnviar.disabled = true;
+        ajustarAltura();
+        fijarEstadoEnvio(true);
+
+        totalConsultas += 1;
+        actualizarContador();
+        btnReiniciar.disabled = false;
+
+        function finalizar() {
+          fijarEstadoEnvio(false);
+          textarea.focus();
+        }
 
         google.script.run
           .withSuccessHandler(function (respuesta) {
             resolverBurbujaBot(idFila, respuesta, false);
-            enviando = false;
-            btnEnviar.disabled = false;
-            textarea.focus();
+            finalizar();
           })
           .withFailureHandler(function (error) {
-            resolverBurbujaBot(idFila, 'Ocurrió un error inesperado: ' + error.message, true);
-            enviando = false;
-            btnEnviar.disabled = false;
+            const detalle = (error && error.message) || 'error desconocido';
+            resolverBurbujaBot(
+              idFila,
+              'No fue posible obtener una respuesta. Detalle técnico: ' + detalle,
+              true
+            );
+            finalizar();
           })
           .consultarBot(pregunta);
       }
+
+      function reiniciarConversacion() {
+        if (enviando) return;
+        totalConsultas = 0;
+        actualizarContador();
+        btnReiniciar.disabled = true;
+        mostrarEstadoVacio();
+        textarea.value = '';
+        ajustarAltura();
+        actualizarBotonEnviar();
+        textarea.focus();
+      }
+
+      /* ---------- Eventos ---------- */
+
+      textarea.addEventListener('input', function () {
+        ajustarAltura();
+        actualizarBotonEnviar();
+      });
+
+      textarea.addEventListener('keydown', function (evento) {
+        if (evento.key !== 'Enter') return;
+
+        if (evento.shiftKey && !evento.metaKey && !evento.ctrlKey) return;
+
+        evento.preventDefault();
+        enviarPregunta();
+      });
+
+      textarea.addEventListener('focus', function () {
+        composer.classList.add('enfocado');
+      });
+
+      textarea.addEventListener('blur', function () {
+        composer.classList.remove('enfocado');
+      });
+
+      composer.addEventListener('mousedown', function (evento) {
+        if (evento.target === composer) {
+          evento.preventDefault();
+          textarea.focus();
+        }
+      });
+
+      btnEnviar.addEventListener('click', enviarPregunta);
+      btnReiniciar.addEventListener('click', reiniciarConversacion);
+
+      mensajesDiv.addEventListener('click', function (evento) {
+        const chip = evento.target.closest('.chip');
+        if (chip) {
+          textarea.value = chip.querySelector('span').textContent;
+          ajustarAltura();
+          actualizarBotonEnviar();
+          enviarPregunta();
+          return;
+        }
+
+        const copiar = evento.target.closest('.btn-copiar');
+        if (copiar) manejarCopia(copiar);
+      });
+
+      mensajesDiv.addEventListener('scroll', function () {
+        tarjeta.classList.toggle('desplazado', mensajesDiv.scrollTop > 4);
+      });
+
+      mostrarEstadoVacio();
+      actualizarContador();
+      textarea.focus();
     </script>
   </body>
 </html>
