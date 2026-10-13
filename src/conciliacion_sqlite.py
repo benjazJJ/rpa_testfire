@@ -139,13 +139,24 @@ class ConciliadorMovimientosSQL:
                 }
             )
 
+        conciliados = sum(1 for r in resultados if r["estado_conciliacion"] == "Conciliado")
+        con_diferencias = sum(1 for r in resultados if r["estado_conciliacion"] == "Con diferencias")
+        solo_testfire = sum(1 for r in resultados if r["estado_conciliacion"] == "Solo en TestFire")
+        solo_maestro = sum(1 for r in resultados if r["estado_conciliacion"] == "Solo en maestro")
+
         resumen = {
             "total_testfire": len(web),
             "total_maestro": len(maestro_por_id),
-            "conciliados": sum(1 for r in resultados if r["estado_conciliacion"] == "Conciliado"),
-            "con_diferencias": sum(1 for r in resultados if r["estado_conciliacion"] == "Con diferencias"),
-            "solo_testfire": sum(1 for r in resultados if r["estado_conciliacion"] == "Solo en TestFire"),
-            "solo_maestro": sum(1 for r in resultados if r["estado_conciliacion"] == "Solo en maestro"),
+            "conciliados": conciliados,
+            "con_diferencias": con_diferencias,
+            "solo_testfire": solo_testfire,
+            "solo_maestro": solo_maestro,
+            # Se mantiene "no_conciliados" (= todo lo que no es "Conciliado")
+            # porque main.py y GeneradorReporteExcel ya dependen de esta
+            # clave con el ConciliadorMovimientos original; conservarla aquí
+            # permite reemplazar una clase por la otra sin tocar el resto
+            # del RPA.
+            "no_conciliados": con_diferencias + solo_testfire + solo_maestro,
         }
 
         return resultados, resumen

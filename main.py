@@ -12,11 +12,14 @@ Flujo actual:
 7. Guardar y subir la evidencia del login.
 8. Abrir la sección de actividad de la cuenta.
 9. Extraer los movimientos de la tabla.
-10. Conciliar los movimientos con el archivo maestro local.
+10. Conciliar los movimientos con el maestro en SQLite (migrado desde
+    el Excel con scripts/migrar_master_a_sqlite.py).
 11. Generar un reporte Excel con movimientos y conciliación.
 12. Subir el reporte Excel a Google Drive.
 13. Enviar el reporte a los destinatarios mediante Gmail API.
-14. Enviar un resumen JSON mediante HTTP POST.
+14. Reportar el resultado con los 5 métodos HTTP (GET, POST, PUT, PATCH,
+    DELETE) contra una API externa (reqres.in), incluyendo
+    enriquecimiento de los movimientos con diferencias.
 15. Registrar cada acción en Google Sheets.
 16. Mantener Firefox abierto hasta presionar ENTER.
 17. Cerrar Firefox de manera segura.
@@ -26,11 +29,11 @@ import getpass
 import time
 from selenium.common.exceptions import InvalidSessionIdException, NoSuchWindowException
 
-from src.conciliacion import ConciliadorMovimientos
+from src.conciliacion_sqlite import ConciliadorMovimientosSQL
 from src.excel_report import GeneradorReporteExcel
 from src.google_drive import GoogleDriveEvidencias
 from src.google_sheets import GoogleSheetsAuditoria
-from src.logs import RegistroHttpWebhook
+from src.integracion_evaluacion2 import reportar_resultado_http
 from src.navegador import FirefoxCerradoError, NavegadorTestFire
 from src.notificaciones import NotificadorGmail
 from src.testfire_bot import TestFireBot
@@ -395,8 +398,10 @@ def main():
 
                     # El conciliador compara los movimientos obtenidos
                     # desde TestFire con data/entrada/
-                    # conciliacion_master.xlsx.
-                    conciliador = ConciliadorMovimientos()
+                    # conciliacion_master.db (migrado desde el Excel con
+                    # scripts/migrar_master_a_sqlite.py, Evaluación 2 /
+                    # IL 2.3: integración con base de datos real).
+                    conciliador = ConciliadorMovimientosSQL()
 
                     (
                         resultados_conciliacion,
@@ -485,76 +490,54 @@ def main():
                         evidencia_drive=enlace_reporte,
                     )
 
-                    # PASO 8: ENVIAR RESUMEN MEDIANTE HTTP POST
+                    # PASO 8: REPORTAR RESULTADO MEDIANTE LOS 5 MÉTODOS HTTP
+                    # (Evaluación 2 / IL 2.4: GET, POST, PUT, PATCH, DELETE
+                    # contra reqres.in, con JSON y validación de código de
+                    # estado). Reemplaza el webhook propio de src/logs.py,
+                    # que solo soportaba POST.
 
                     navegador.verificar_abierto()
                     ultima_etapa = paso_actual
-                    paso_actual = "Enviar resumen HTTP"
+                    paso_actual = "Reportar resultado HTTP"
                     inicio_paso = time.perf_counter()
 
-                    # RegistroHttpWebhook obtiene la URL desde
-                    # config/config.json. El JSON no incluye usuario,
-                    # contraseña ni credenciales de Google.
-                    registro_http = RegistroHttpWebhook()
-
-                    exito_http, detalle_http = (
-                        registro_http.enviar_resumen(
-                            id_ejecucion=id_ejecucion,
-                            estados={
-                                "login": estado_login,
-                                "actividad_cuenta": estado_actividad,
-                                "extraccion": estado_extraccion,
-                                "conciliacion": estado_conciliacion,
-                                "reporte_excel": estado_excel,
-                                "correo": estado_correo,
-                            },
-                            metricas={
-                                "movimientos_extraidos": (
-                                    cantidad_movimientos
-                                ),
-                                "movimientos_maestro": (
-                                    resumen_conciliacion[
-                                        "total_maestro"
-                                    ]
-                                ),
-                                "conciliados": (
-                                    resumen_conciliacion[
-                                        "conciliados"
-                                    ]
-                                ),
-                                "no_conciliados": (
-                                    resumen_conciliacion[
-                                        "no_conciliados"
-                                    ]
-                                ),
-                                "con_diferencias": (
-                                    resumen_conciliacion[
-                                        "con_diferencias"
-                                    ]
-                                ),
-                                "solo_testfire": (
-                                    resumen_conciliacion[
-                                        "solo_testfire"
-                                    ]
-                                ),
-                                "solo_maestro": (
-                                    resumen_conciliacion[
-                                        "solo_maestro"
-                                    ]
-                                ),
-                            },
-                            enlace_reporte=enlace_reporte,
-                        )
+                    traza_http = reportar_resultado_http(
+                        resultados_conciliacion=resultados_conciliacion,
+                        resumen_conciliacion=resumen_conciliacion,
+                        id_ejecucion=id_ejecucion,
                     )
+
+                    pasos_http = (
+                        "post_registro",
+                        "put_actualizacion",
+                        "get_enriquecimiento",
+                        "patch_cierre",
+                        "delete_limpieza",
+                    )
+                    metodos_exitosos = sum(
+                        1 for paso in pasos_http if traza_http[paso]["valido"]
+                    )
+                    exito_http = metodos_exitosos == len(pasos_http)
 
                     estado_http = (
                         "Exitoso" if exito_http else "Fallido"
                     )
 
-                    # Aunque el webhook no esté disponible, el método
-                    # devuelve False en lugar de lanzar una excepción.
-                    # Así podemos dejar constancia en la auditoría sin
-                    # perder el reporte que ya fue generado y subido.
+                    detalle_http = (
+                        f"{metodos_exitosos}/{len(pasos_http)} métodos HTTP "
+                        "(GET/POST/PUT/PATCH/DELETE contra reqres.in) "
+                        "devolvieron el código esperado. "
+                        + "; ".join(
+                            f"{traza_http[paso]['metodo']}: "
+                            f"{traza_http[paso]['detalle']}"
+                            for paso in pasos_http
+                        )
+                    )[:300]
+
+                    # Ninguno de los 5 métodos lanza excepción aunque la red
+                    # falle (ver DemoHttpReqres._ejecutar): siempre queda
+                    # constancia en la auditoría sin perder el reporte Excel
+                    # que ya fue generado y subido.
                     auditoria.registrar_evento(
                         id_ejecucion=id_ejecucion,
                         modulo="Integración HTTP",
@@ -629,7 +612,7 @@ def main():
         )
         print(f"Reporte Excel: {estado_excel}")
         print(f"Envío por correo: {estado_correo}")
-        print(f"Envío HTTP POST: {estado_http}")
+        print(f"Reporte HTTP (5 métodos): {estado_http}")
 
         # Permite revisar visualmente la última página antes
         # de cerrar Firefox.
