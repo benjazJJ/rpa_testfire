@@ -123,6 +123,11 @@ class NavegadorTestFire:
         # Esta configuración permite continuar en el sitio de prueba.
         opciones.accept_insecure_certs = True
 
+        # Evitamos que Firefox ofrezca guardar la contraseña del login,
+        # ya que ese aviso puede interrumpir la automatización.
+        opciones.set_preference("signon.rememberSignons", False)
+        opciones.set_preference("signon.autofillForms", False)
+
         # Service indica a Selenium dónde se encuentra GeckoDriver.
         servicio = Service(str(ruta_geckodriver))
 

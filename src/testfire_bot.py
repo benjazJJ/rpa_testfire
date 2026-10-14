@@ -8,7 +8,10 @@ clase NavegadorTestFire.
 
 from pathlib import Path
 
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import (
+    TimeoutException,
+    UnexpectedAlertPresentException,
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -196,11 +199,27 @@ class TestFireBot:
                 dentro del tiempo configurado.
         """
 
-        self.espera.until(
-            lambda driver: (
-                bool(self._obtener_error_login())
-                or self._login_exitoso()
-            )
+        # Firefox o el sitio pueden mostrar una alerta tras enviar el
+        # formulario. Selenium la descarta automáticamente y lanza
+        # UnexpectedAlertPresentException; en ese caso volvemos a esperar.
+        for intento in range(3):
+            try:
+                self.espera.until(
+                    lambda driver: (
+                        bool(self._obtener_error_login())
+                        or self._login_exitoso()
+                    )
+                )
+                return
+
+            except UnexpectedAlertPresentException as alerta:
+                print(
+                    "[TESTFIRE] Alerta descartada durante el login: "
+                    f"{alerta.alert_text}"
+                )
+
+        raise TimeoutException(
+            "Se repitieron alertas y no se obtuvo el resultado del login."
         )
 
     def iniciar_sesion(

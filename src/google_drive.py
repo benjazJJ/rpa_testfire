@@ -2,6 +2,7 @@ import json
 import mimetypes
 from pathlib import Path
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -54,9 +55,14 @@ class GoogleDriveEvidencias:
         if not credenciales or not credenciales.valid:
 
             if credenciales and credenciales.expired and credenciales.refresh_token:
-                credenciales.refresh(Request())
+                try:
+                    credenciales.refresh(Request())
+                except RefreshError:
+                    print("[DRIVE] Token expirado o revocado. Se solicitará autorización nuevamente.")
+                    ruta_token.unlink(missing_ok=True)
+                    credenciales = None
 
-            else:
+            if not credenciales or not credenciales.valid:
                 flujo = InstalledAppFlow.from_client_secrets_file(
                     str(ruta_oauth),
                     SCOPES,
