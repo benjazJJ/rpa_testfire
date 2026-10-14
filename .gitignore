@@ -8,3 +8,7 @@ config/oauth_drive.json
 config/token_drive.json
 config/token_gmail.json
 config/config.json
+# Base SQLite generada desde el maestro Excel (scripts/migrar_master_a_sqlite.py)
+data/entrada/*.db
+# Respaldos automáticos de scripts/regenerar_master_desde_reporte.py
+data/entrada/conciliacion_master_*.xlsx

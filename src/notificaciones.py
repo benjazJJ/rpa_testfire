@@ -15,6 +15,7 @@ import mimetypes
 from email.message import EmailMessage
 from pathlib import Path
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -167,7 +168,17 @@ class NotificadorGmail:
 
         if credenciales and credenciales.expired:
             if credenciales.refresh_token:
-                credenciales.refresh(Request())
+                try:
+                    credenciales.refresh(Request())
+                except RefreshError:
+                    # invalid_grant: el refresh token fue revocado o expiró
+                    # (en apps OAuth en modo "Testing" dura solo 7 días).
+                    # Se descarta y se solicita una nueva autorización.
+                    print(
+                        "[GMAIL] Token OAuth vencido o revocado; "
+                        "se solicitará una nueva autorización en el navegador."
+                    )
+                    credenciales = None
             else:
                 credenciales = None
 
