@@ -14,15 +14,16 @@ Flujo actual:
 9. Extraer los movimientos de la tabla.
 10. Conciliar los movimientos con el maestro en SQLite (migrado desde
     el Excel con scripts/migrar_master_a_sqlite.py).
-11. Generar un reporte Excel con movimientos y conciliación.
-12. Subir el reporte Excel a Google Drive.
-13. Enviar el reporte a los destinatarios mediante Gmail API.
-14. Reportar el resultado con los 5 métodos HTTP (GET, POST, PUT, PATCH,
+11. Asignar prioridad y analista ficticio (RandomUser) a cada excepción.
+12. Generar un reporte Excel con movimientos y conciliación.
+13. Subir el reporte Excel a Google Drive.
+14. Enviar el reporte a los destinatarios mediante Gmail API.
+15. Reportar el resultado con los 5 métodos HTTP (GET, POST, PUT, PATCH,
     DELETE) contra una API externa (reqres.in), incluyendo
     enriquecimiento de los movimientos con diferencias.
-15. Registrar cada acción en Google Sheets.
-16. Mantener Firefox abierto hasta presionar ENTER.
-17. Cerrar Firefox de manera segura.
+16. Registrar cada acción en Google Sheets.
+17. Mantener Firefox abierto hasta presionar ENTER.
+18. Cerrar Firefox de manera segura.
 """
 
 import getpass
@@ -30,6 +31,7 @@ import time
 from selenium.common.exceptions import InvalidSessionIdException, NoSuchWindowException
 
 from src.conciliacion_sqlite import ConciliadorMovimientosSQL
+from src.datos_sinteticos import GeneradorDatosSinteticos
 from src.excel_report import GeneradorReporteExcel
 from src.google_drive import GoogleDriveEvidencias
 from src.google_sheets import GoogleSheetsAuditoria
@@ -436,6 +438,49 @@ def main():
                         accion=paso_actual,
                         estado=estado_conciliacion,
                         detalle=detalle_conciliacion,
+                        tiempo_inicio=inicio_paso,
+                        registros=len(resultados_conciliacion),
+                    )
+
+                    # PASO 5B: ASIGNAR EXCEPCIONES CON DATOS SINTÉTICOS
+                    # (Evaluación 2 / IL 2.5: RandomUser entrega analistas
+                    # ficticios y cada excepción recibe prioridad y
+                    # responsable; ver docs/ideacion_IL2.5.md).
+
+                    ultima_etapa = paso_actual
+                    paso_actual = "Asignar excepciones"
+                    inicio_paso = time.perf_counter()
+
+                    # Es un enriquecimiento: si falla, el reporte se
+                    # genera igual, solo sin las columnas de asignación.
+                    try:
+                        resumen_asignacion = (
+                            GeneradorDatosSinteticos().asignar_excepciones(
+                                resultados_conciliacion
+                            )
+                        )
+                        estado_asignacion = "Exitoso"
+                        detalle_asignacion = (
+                            f"{resumen_asignacion['excepciones_asignadas']} "
+                            "excepciones asignadas "
+                            f"({resumen_asignacion['origen']}). "
+                            f"Prioridad: {resumen_asignacion['por_prioridad']}"
+                        )
+                    except Exception as error_asignacion:
+                        estado_asignacion = "Fallido"
+                        detalle_asignacion = (
+                            "No fue posible asignar excepciones: "
+                            f"{error_asignacion}"
+                        )[:300]
+
+                    print(f"[SINTÉTICOS] {detalle_asignacion}")
+
+                    auditoria.registrar_evento(
+                        id_ejecucion=id_ejecucion,
+                        modulo="Datos sintéticos",
+                        accion=paso_actual,
+                        estado=estado_asignacion,
+                        detalle=detalle_asignacion,
                         tiempo_inicio=inicio_paso,
                         registros=len(resultados_conciliacion),
                     )

@@ -441,6 +441,8 @@ class GeneradorReporteExcel:
             "Monto",
             "Estado conciliación",
             "Detalle",
+            "Prioridad",
+            "Analista asignado",
         ]
 
         hoja.append(encabezados)
@@ -482,6 +484,10 @@ class GeneradorReporteExcel:
                             "",
                         )
                     ),
+                    # Columnas de src/datos_sinteticos.py; quedan vacías
+                    # si la asignación de excepciones no se ejecutó.
+                    str(resultado.get("prioridad_revision", "")),
+                    str(resultado.get("analista_asignado", "")),
                 ]
             )
 
@@ -513,7 +519,7 @@ class GeneradorReporteExcel:
                 '"$"#,##0.00;[Red]-"$"#,##0.00'
             )
 
-            for columna in (1, 2, 3, 6):
+            for columna in (1, 2, 3, 6, 8):
                 hoja.cell(fila, columna).alignment = Alignment(
                     horizontal="center",
                     vertical="center",
@@ -555,6 +561,8 @@ class GeneradorReporteExcel:
             "E": 18,
             "F": 23,
             "G": 52,
+            "H": 12,
+            "I": 24,
         }
 
         for columna, ancho in anchos_columnas.items():
@@ -564,7 +572,7 @@ class GeneradorReporteExcel:
         if resultados_conciliacion:
             tabla = Table(
                 displayName="TablaConciliacion",
-                ref=f"A1:G{hoja.max_row}",
+                ref=f"A1:I{hoja.max_row}",
             )
 
             tabla.tableStyleInfo = TableStyleInfo(
