@@ -1,0 +1,4 @@
+# Los lanzadores de Windows siempre con finales de línea CRLF, en cualquier PC.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
