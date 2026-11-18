@@ -6,9 +6,9 @@
     "imap_servidor": "mail.mantistcy.cl",
     "imap_puerto": 993,
     "ssl": true,
-    "usuario": "COMPLETAR (usuario de la diapositiva)",
-    "clave": "COMPLETAR (o usar la variable de entorno RPA_CORREO_CLAVE)",
-    "remitente": "COMPLETAR (direccion completa de la cuenta)",
+    "usuario": "automatizacion_procesos@mantistcy.cl",
+    "clave": "COMPLETAR (la de la diapositiva; o usar la variable de entorno RPA_CORREO_CLAVE)",
+    "remitente": "automatizacion_procesos@mantistcy.cl",
     "destinatarios": ["be.palmap@duocuc.cl", "COMPLETAR correo de Gustavo"],
     "supervisor": "be.palmap@duocuc.cl"
   },
