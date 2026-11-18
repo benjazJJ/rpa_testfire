@@ -70,7 +70,10 @@ def main(argv: list[str] | None = None) -> int:
         imap.login(cfg["usuario"], cfg["clave"])
         print("[OK] IMAP: sesión iniciada")
         _, carpetas = imap.list()
-        nombres = [c.decode(errors="replace").split(' "')[-1].strip('"') for c in carpetas or [] if c]
+        import re
+        patron = re.compile(r'\([^)]*\) (?:"[^"]*"|NIL) (.+)')
+        nombres = [m.group(1).strip().strip('"') for c in carpetas or [] if c
+                   for m in [patron.match(c.decode(errors="replace"))] if m]
         print(f"[OK] IMAP: carpetas -> {', '.join(nombres)}")
         imap.select("INBOX", readonly=True)
         _, datos = imap.uid("SEARCH", None, "SUBJECT", '"RPA-TF"')
