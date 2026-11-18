@@ -8,54 +8,53 @@ el patrón **dispatcher / performer** con una cola y su tracker.
 
 Diagrama completo, con decisiones y manejo de errores: [`topologia.png`](topologia.png).
 
-## Funciona en cualquier PC
+## El robot de Rocketbot
 
-- **Los `.bat` no tienen rutas fijas.** Encuentran el repo solos y usan `%USERPROFILE%\Rocketbot_Salida` como carpeta de salida. Es `C:\Users\bpalm\...` en el PC de Benjamín y la carpeta del usuario de Gustavo en el suyo.
-- **Los `.bat` no necesitan argumentos.** Cada uno toma el archivo más reciente que dejó el paso anterior.
-- **Lo propio de cada PC va en `config/config.json`.** Ahí van la clave del correo y la ruta de Rocketbot; ese archivo no se sube a GitHub. La plantilla es [`config/config.eval3.example.json`](../../config/config.eval3.example.json).
-- **En Rocketbot hay una sola variable**: `ruta_repo`, la carpeta donde está clonado el repo. Si en los dos PCs se clona en `C:\Workspace\rpa_testfire\rpa_testfire`, no hay que cambiar nada.
+`rocketbot/RPA_TestFire_Eval3.json` se importa en Rocketbot Studio. Está construido sobre el v5 (`rocketbot/RPA_TestFire_Login_v5.json`): el login y la extracción son los mismos, y la conciliación y el resto de los subprocesos se encadenan después.
 
-## Pasos del robot en Rocketbot
+| Línea | Subproceso | Qué hace |
+|---|---|---|
+| 1 a 6 | 1 · Login + extracción | Igual que el v5. Si la validación de filas y columnas da OK, deja `extraccion_ok = True` |
+| 7 | 2b · Conciliación | `conciliar_rocketbot.bat` |
+| 8 | 2c · API pública | `referencia_externa.bat`: dólar de mindicador.cl → `reporte_final_X.xlsx` |
+| 9 | 3 · Excel | `abrir_excel.bat`: abre el libro en Excel, captura de pantalla, guarda y cierra |
+| 10 | 4a · Dispatcher | `dispatcher.bat` |
+| 11 | 4b · Performer | `performer.bat`: envío real por SMTP |
+| 12 | 4c · Correo al supervisor | `resumen_supervisor.bat` + comandos **Configurar servidor** y **Enviar email SMTP** de Rocketbot |
+| 13 | 4d · Recepción | Comando **Listar email nuevos IMAP** de Rocketbot |
+| 14 | 4d · Clasificación | `clasificar.bat` |
+| 15 | 5 · Cierre | Mensaje final OK o con errores |
 
-Cada paso con `.bat` es un comando **Ejecutar archivo** con la ruta `{ruta_repo}\scripts\<nombre>.bat`, seguido de un **Ejecutar Python** que lee el resultado (ver más abajo).
+**Cómo encadena los pasos.** Cada subproceso es un `If {continuar}`. Adentro tiene tres comandos:
+- **Ejecutar archivo** del `.bat`. Lo que el `.bat` imprime queda en `{res_...}`.
+- Un **If** que revisa si ese texto trae `RESULTADO=OK`.
+- Si no lo trae, un **log de error** y `continuar = False`. Los subprocesos siguientes no corren y el cierre informa "fin CON ERRORES".
 
-| # | Subproceso | En Rocketbot | Resultado |
-|---|---|---|---|
-| 0 | Inicio | Asignar `ruta_repo` | — |
-| 1 | Login | Robot v5 (sin cambios) | Sesión en TestFire |
-| 2a | Extracción | Robot v5 → guarda `consolidado.xlsx` en `Rocketbot_Salida` | `consolidado.xlsx` |
-| 2b | Conciliación | `conciliar_rocketbot.bat` | `discrepancias_X.xlsx` |
-| 2c | API del dólar | `referencia_externa.bat` | `api_dolar_X.json` + `reporte_final_X.xlsx` |
-| 3 | Excel en escritorio | Comandos Excel: abrir `reporte_final_X.xlsx`, ir a "Referencia externa", captura, guardar y **cerrar** | Evidencia IL 3.2 |
-| 4a | Dispatcher | `dispatcher.bat` | Correos en la cola |
-| 4b | Performer | `performer.bat` (envío real por SMTP) | Correos enviados + hoja "Seguimiento de envíos" |
-| 4c | Correo al supervisor | `resumen_supervisor.bat` → **Configurar servidor** + **Enviar email SMTP** con `{para}`, `{asunto}`, `{mensaje}`, `{adjunto}` | Correo con el reporte adjunto |
-| 4d | Recepción | **Listar email nuevos IMAP** (para mostrarlo) + `clasificar.bat` | Respuestas en RPA_APROBADO / RPA_RECHAZADO / RPA_REVISAR |
-| 5 | Cierre | Mensaje final con los totales | — |
+**Lo que se agrega a mano (3 comandos).** El v5 no traía comandos de correo, así que no tenía de dónde copiar su formato. En las líneas 12 y 13 hay mensajes rojos que dicen **"AGREGAR AQUÍ"**: se reemplaza cada uno por el comando indicado y después se borra el mensaje.
 
-### Leer el resultado de cada `.bat` (comando Ejecutar Python)
+1. **Configurar servidor**: los datos de la diapositiva.
+2. **Enviar email SMTP**:
+    - Para: `{correo_supervisor}`
+    - Asunto: `[RPA TestFire] Resumen de ejecución`
+    - Mensaje: `{mensaje_supervisor}`
+    - Adjunto: `{ruta_salida}\reporte_final_ultimo.xlsx`
+3. **Listar email nuevos IMAP**.
 
-Cada `.bat` deja una línea JSON en `Rocketbot_Salida\<nombre>_stdout.log`. Los errores quedan en `<nombre>_errores.log`. Este bloque se copia en el **Ejecutar Python** que va después de cada `.bat`, cambiando solo el nombre del log:
+**Variables propias de cada PC** (pestaña *Variables* de Rocketbot):
 
-```python
-import json, os
-salida = os.path.join(os.path.expanduser("~"), "Rocketbot_Salida")
-with open(os.path.join(salida, "performer_stdout.log"), encoding="utf-8") as archivo:
-    datos = json.loads(archivo.read().strip().splitlines()[-1])
-SetVar("paso_ok", "1" if datos.get("ok") else "0")
-SetVar("paso_detalle", json.dumps(datos, ensure_ascii=False))
-```
+| Variable | PC de Benjamín | PC de Gustavo |
+|---|---|---|
+| `ruta_repo` | `C:\Workspace\rpa_testfire\rpa_testfire` | Donde esté clonado el repo |
+| `ruta_salida` | `C:\Users\bpalm\Rocketbot_Salida` | `C:\Users\<usuario>\Rocketbot_Salida` |
+| `ruta_perfil_ff` | `C:/Users/bpalm/Rocketbot_FF_Profile` | `C:/Users/<usuario>/Rocketbot_FF_Profile` |
+| `correo_supervisor` | `be.palmap@duocuc.cl` | El mismo u otro |
 
-Después, un **If** con `{paso_ok} == "0"` lleva al cierre con error. Ese es el manejo de errores entre subprocesos.
+Nada más cambia entre PCs.
+- Los `.bat` encuentran el repo solos y usan `%USERPROFILE%\Rocketbot_Salida`, que debe ser la misma carpeta que `ruta_salida`.
+- Cada `.bat` toma el archivo más reciente que dejó el paso anterior.
+- Lo demás va en `config/config.json`, que no se sube a GitHub. La plantilla está en `config/config.eval3.example.json`.
 
-Para el correo al supervisor (4c), el mismo bloque con `resumen_supervisor_stdout.log`, agregando:
-
-```python
-SetVar("para", datos["para"])
-SetVar("asunto", datos["asunto"])
-SetVar("mensaje", datos["mensaje"])
-SetVar("adjunto", datos["adjunto"])
-```
+**Si algo falla**, el error de cada paso queda en `Rocketbot_Salida\<paso>_errores.log`.
 
 ## API pública: mindicador.cl
 

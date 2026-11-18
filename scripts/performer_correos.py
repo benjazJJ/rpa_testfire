@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     tracker = None
     if args.exportar_ultimo and not args.exportar_excel:
         try:
-            args.exportar_excel = ultimo_archivo(carpeta_salida(), "reporte_final_*.xlsx")
+            args.exportar_excel = ultimo_archivo(carpeta_salida(), "reporte_final_2*.xlsx")
         except FileNotFoundError as error:
             bitacora.advertencia("No se exportó el tracker: %s", error)
     if args.exportar_excel:

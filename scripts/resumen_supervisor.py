@@ -6,15 +6,20 @@ la demo, como en la clase). Este script solo prepara los textos:
 
     py scripts/resumen_supervisor.py --excel <reporte_final_X.xlsx>
 
+Deja todo con nombres fijos en la carpeta de salida, para que Rocketbot no
+tenga que buscar rutas:
+- ``reporte_final_ultimo.xlsx``: copia del reporte final (el adjunto).
+- ``mensaje_supervisor.txt``: el texto del correo (``resumen_supervisor.bat``
+  lo imprime y Rocketbot lo guarda en una variable).
+
 stdout: UNA línea JSON con ``para``, ``asunto``, ``mensaje`` y ``adjunto``.
-En Rocketbot se lee con "Ejecutar Python" (json.loads + SetVar) y cada
-campo se pega en el comando Enviar email SMTP.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -57,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cola", type=Path, default=RUTA_COLA)
     args = parser.parse_args(argv)
     try:
-        args.excel = args.excel or ultimo_archivo(carpeta_salida(), "reporte_final_*.xlsx")
+        args.excel = args.excel or ultimo_archivo(carpeta_salida(), "reporte_final_2*.xlsx")
     except FileNotFoundError as error:
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
         return 2
@@ -87,8 +92,13 @@ def main(argv: list[str] | None = None) -> int:
         "Seguimiento de envíos.\n\n"
         "Correo generado automáticamente por el RPA TestFire (proyecto académico ATY1102)."
     )
+    salida = args.excel.resolve().parent
+    adjunto = salida / "reporte_final_ultimo.xlsx"
+    if args.excel.resolve() != adjunto:
+        shutil.copyfile(args.excel, adjunto)
+    (salida / "mensaje_supervisor.txt").write_text(mensaje, encoding="utf-8")
     print(json.dumps({"ok": True, "para": para, "asunto": asunto, "mensaje": mensaje,
-                      "adjunto": str(args.excel.resolve())}, ensure_ascii=False))
+                      "adjunto": str(adjunto)}, ensure_ascii=False))
     return 0
 
 

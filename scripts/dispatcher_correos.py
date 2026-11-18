@@ -191,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
     inicio = time.perf_counter()
     try:
         if not args.excel and not args.demo_volumen:
-            args.excel = ultimo_archivo(carpeta_salida(), "reporte_final_*.xlsx")
+            args.excel = ultimo_archivo(carpeta_salida(), "reporte_final_2*.xlsx")
         excepciones = leer_excepciones(args.excel) if args.excel else []
         if args.demo_volumen:
             lote = args.lote or f"DEMO_{datetime.now():%Y%m%d_%H%M%S}"
