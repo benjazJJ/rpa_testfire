@@ -45,6 +45,7 @@ sys.path.insert(0, str(RAIZ))
 from src.bitacora import Bitacora, crear_id_ejecucion  # noqa: E402
 from src.cola_correos import RUTA_COLA, ColaCorreos  # noqa: E402
 from src.datos_sinteticos import GeneradorDatosSinteticos  # noqa: E402
+from src.rutas import carpeta_salida, ultimo_archivo  # noqa: E402
 
 RUTA_CONFIG = RAIZ / "config" / "config.json"
 PRIORIDAD_NUMERO = {"Alta": 1, "Media": 2, "Baja": 3, "": 3}
@@ -174,7 +175,7 @@ def armar_demo_volumen(excepciones, cantidad: int, invalido: int | None, lote) -
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Dispatcher: encola los correos de excepciones.")
-    parser.add_argument("--excel", type=Path, help="reporte_final_X.xlsx (hoja Discrepancias)")
+    parser.add_argument("--excel", type=Path, help="reporte_final_X.xlsx (por defecto, el más reciente de la salida)")
     parser.add_argument("--modo", choices=["agrupado", "por-caso"], default="agrupado")
     parser.add_argument("--destinatarios", help="Correos separados por coma (si no, config.json)")
     parser.add_argument("--lote", help="Nombre del lote (por defecto, fecha y hora)")
@@ -189,6 +190,8 @@ def main(argv: list[str] | None = None) -> int:
     bitacora = Bitacora(args.id_ejecucion or crear_id_ejecucion(), usar_sheets=not args.sin_sheets)
     inicio = time.perf_counter()
     try:
+        if not args.excel and not args.demo_volumen:
+            args.excel = ultimo_archivo(carpeta_salida(), "reporte_final_*.xlsx")
         excepciones = leer_excepciones(args.excel) if args.excel else []
         if args.demo_volumen:
             lote = args.lote or f"DEMO_{datetime.now():%Y%m%d_%H%M%S}"

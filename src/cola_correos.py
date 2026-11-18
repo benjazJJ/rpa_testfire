@@ -31,7 +31,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 RAIZ_PROYECTO = Path(__file__).resolve().parent.parent
 RUTA_COLA = RAIZ_PROYECTO / "data" / "cola" / "cola_correos.db"
@@ -80,6 +80,12 @@ class ColaCorreos:
         self.ruta.parent.mkdir(parents=True, exist_ok=True)
         with self._conexion() as con:
             con.executescript(ESQUEMA)
+            # Columnas de la recepción (Subproceso 4d). Se agregan si la cola
+            # se creó con una versión anterior del script.
+            existentes = {f["name"] for f in con.execute("PRAGMA table_info(cola_correos)")}
+            for columna in ("respuesta", "respuesta_de", "respuesta_en"):
+                if columna not in existentes:
+                    con.execute(f"ALTER TABLE cola_correos ADD COLUMN {columna} TEXT")
 
     @contextmanager
     def _conexion(self) -> Iterator[sqlite3.Connection]:
@@ -139,24 +145,29 @@ class ColaCorreos:
             )
             return cursor.rowcount
 
-    def tomar_siguiente(self, id_ejecucion: str) -> dict[str, Any] | None:
+    def tomar_siguiente(self, id_ejecucion: str, excluir: Iterable[int] = ()) -> dict[str, Any] | None:
         """
         Toma el próximo caso de forma atómica y lo marca EN_PROCESO.
 
         Orden: primero los PENDIENTE nunca intentados (por prioridad y orden
         de llegada); los ERROR se reintentan después, al final de la cola.
+        ``excluir``: IDs que esta corrida ya no debe volver a tomar.
         """
+        excluir = [int(i) for i in excluir]
+        filtro = f"AND id NOT IN ({','.join('?' * len(excluir))})" if excluir else ""
         with self._conexion() as con:
             con.execute("BEGIN IMMEDIATE")  # bloquea escritura: nadie más toma este caso
             fila = con.execute(
                 f"""
                 SELECT id FROM cola_correos
-                WHERE estado = '{PENDIENTE}'
-                   OR (estado = '{ERROR}' AND intentos < max_intentos)
+                WHERE (estado = '{PENDIENTE}'
+                       OR (estado = '{ERROR}' AND intentos < max_intentos))
+                  {filtro}
                 ORDER BY CASE estado WHEN '{PENDIENTE}' THEN 0 ELSE 1 END,
                          intentos, prioridad, id
                 LIMIT 1
-                """
+                """,
+                excluir,
             ).fetchone()
             if fila is None:
                 con.execute("COMMIT")
@@ -196,6 +207,17 @@ class ColaCorreos:
             )
         return estado
 
+    # -------------------------------------------------------------- recepción
+
+    def registrar_respuesta(self, id_caso: int, decision: str, de: str, fecha: str) -> bool:
+        """Anota la respuesta (APROBADO / RECHAZADO / REVISAR). False si el caso no existe."""
+        with self._conexion() as con:
+            cursor = con.execute(
+                "UPDATE cola_correos SET respuesta = ?, respuesta_de = ?, respuesta_en = ? WHERE id = ?",
+                (decision, de[:200], fecha, int(id_caso)),
+            )
+            return cursor.rowcount == 1
+
     # ---------------------------------------------------------------- tracker
 
     def resumen(self, lote: str | None = None) -> dict[str, int]:
@@ -215,7 +237,8 @@ class ColaCorreos:
             filas = con.execute(
                 "SELECT id, lote, destinatario, nombre_destino, asunto, casos, prioridad, estado, "
                 "intentos, ultimo_error, creado_en, tomado_en, procesado_en, "
-                f"ejecucion_performer, pc_performer FROM cola_correos {filtro} ORDER BY id",
+                "ejecucion_performer, pc_performer, respuesta, respuesta_de, respuesta_en "
+                f"FROM cola_correos {filtro} ORDER BY id",
                 params,
             ).fetchall()
         return [dict(f) for f in filas]

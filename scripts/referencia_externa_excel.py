@@ -42,6 +42,7 @@ sys.path.insert(0, str(RAIZ))
 
 from src.api_dolar import URL_DOLAR, ErrorApiDolar, obtener_dolar  # noqa: E402
 from src.bitacora import Bitacora, crear_id_ejecucion  # noqa: E402
+from src.rutas import carpeta_salida, ultimo_archivo  # noqa: E402
 
 COLUMNA_MONTO = "monto"
 COLUMNA_CLP = "monto_clp"
@@ -169,15 +170,17 @@ def ejecutar(excel: Path, salida: Path, bitacora: Bitacora) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Agrega el dólar de mindicador.cl al reporte Excel.")
-    parser.add_argument("--excel", type=Path, required=True, help="Reporte de discrepancias (xlsx)")
-    parser.add_argument("--salida", type=Path, required=True, help="Carpeta donde dejar el reporte final")
+    parser.add_argument("--excel", type=Path, help="Reporte de discrepancias (por defecto, el más reciente)")
+    parser.add_argument("--salida", type=Path, default=None, help="Carpeta de salida (por defecto, Rocketbot_Salida)")
     parser.add_argument("--id-ejecucion", default=None, help="ID de la corrida (para unir los logs)")
     parser.add_argument("--sin-sheets", action="store_true", help="No escribir en la Auditoría RPA")
     args = parser.parse_args(argv)
 
     bitacora = Bitacora(args.id_ejecucion or crear_id_ejecucion(), usar_sheets=not args.sin_sheets)
     try:
-        resultado = ejecutar(args.excel, args.salida, bitacora)
+        salida = args.salida or carpeta_salida()
+        excel = args.excel or ultimo_archivo(salida, "discrepancias_*.xlsx")
+        resultado = ejecutar(excel, salida, bitacora)
     except Exception as error:
         bitacora.error("Referencia externa falló: %s", error)
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))

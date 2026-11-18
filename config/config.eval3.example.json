@@ -1,0 +1,22 @@
+{
+  "_instrucciones": "Copiar las secciones correo y ejecucion dentro de config/config.json (que no se sube a GitHub) y completar los datos de cada PC.",
+  "correo": {
+    "smtp_servidor": "mail.mantistcy.cl",
+    "smtp_puerto": 465,
+    "imap_servidor": "mail.mantistcy.cl",
+    "imap_puerto": 993,
+    "ssl": true,
+    "usuario": "COMPLETAR (usuario de la diapositiva)",
+    "clave": "COMPLETAR (o usar la variable de entorno RPA_CORREO_CLAVE)",
+    "remitente": "COMPLETAR (direccion completa de la cuenta)",
+    "destinatarios": ["be.palmap@duocuc.cl", "COMPLETAR correo de Gustavo"],
+    "supervisor": "be.palmap@duocuc.cl"
+  },
+  "ejecucion": {
+    "rocketbot_exe": "C:\\Rocketbot\\rocketbot.exe",
+    "robot": "RPA_TestFire_Eval3",
+    "db": "C:\\Rocketbot\\robot.db",
+    "horario": {"dias": [0, 1, 2, 3, 4], "desde": "08:00", "hasta": "18:00"},
+    "tiempo_maximo_min": 30
+  }
+}

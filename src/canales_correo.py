@@ -17,6 +17,9 @@ Cada canal implementa ``enviar(caso)`` y señala el resultado así:
 from __future__ import annotations
 
 import re
+import smtplib
+import socket
+import ssl
 from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
@@ -47,13 +50,23 @@ def validar_destinatario(correo: str, permitir_prueba: bool) -> None:
         raise ErrorEnvioPermanente(f"Dominio de prueba no se envía por un canal real: {correo}")
 
 
+# Código del caso en el asunto: "[RPA-TF #12]". Las respuestas ("RE: [RPA-TF #12] ...")
+# lo conservan, y así el clasificador sabe a qué caso de la cola corresponde cada una.
+PATRON_CODIGO = re.compile(r"\[RPA-TF #(\d+)\]")
+
+
+def codigo_caso(id_caso: int) -> str:
+    return f"[RPA-TF #{id_caso}]"
+
+
 def construir_mensaje(caso: dict[str, Any], remitente: str) -> EmailMessage:
     mensaje = EmailMessage()
     mensaje["From"] = remitente
     mensaje["To"] = caso["destinatario"]
-    mensaje["Subject"] = caso["asunto"]
+    mensaje["Subject"] = f"{codigo_caso(caso['id'])} {caso['asunto']}"
     mensaje["Date"] = formatdate(localtime=True)
-    mensaje["Message-ID"] = make_msgid(domain="rpa-testfire.local")
+    dominio = remitente.rsplit("@", 1)[-1] if "@" in remitente else "rpa-testfire.local"
+    mensaje["Message-ID"] = make_msgid(domain=dominio)
     # Encabezado propio: permite reconocer las respuestas a este caso en la recepción.
     mensaje["X-RPA-Caso"] = str(caso["id"])
     mensaje.set_content(caso["cuerpo"])
@@ -99,3 +112,89 @@ class CanalSimulacion:
         ruta = self.carpeta / f"correo_{caso['id']:05d}_{datetime.now():%H%M%S}.eml"
         ruta.write_bytes(bytes(mensaje))
         return str(ruta)
+
+
+class CanalSMTP:
+    """
+    Envío real por el servidor SMTP del curso (SSL, puerto 465), con los
+    datos de la sección "correo" de config.json.
+
+    Abre UNA conexión y la reutiliza para todos los correos de la corrida
+    (una sola autenticación). Traduce cada respuesta del servidor a lo que
+    el performer necesita saber:
+
+    - 535 / autenticación rechazada, remitente rechazado, servidor
+      inalcanzable           -> ErrorCanal (se detiene la corrida)
+    - destinatario rechazado con código 5xx (no existe, dirección mala)
+                             -> ErrorEnvioPermanente (FALLIDO, no se reintenta)
+    - códigos 4xx, conexión cortada o timeout a mitad de camino
+                             -> ErrorEnvio (ERROR, se reintenta después)
+    """
+
+    nombre = "smtp"
+    es_real = True
+
+    def __init__(self, config: dict[str, Any], timeout: int = 30):
+        self.config = config
+        self.timeout = timeout
+        self.remitente = config["remitente"]
+        self._smtp = None
+
+    def _conectar(self):
+        servidor, puerto = self.config["smtp_servidor"], self.config["smtp_puerto"]
+        try:
+            if self.config.get("ssl", True):
+                contexto = ssl.create_default_context()
+                smtp = smtplib.SMTP_SSL(servidor, puerto, timeout=self.timeout, context=contexto)
+            else:  # solo para pruebas locales
+                smtp = smtplib.SMTP(servidor, puerto, timeout=self.timeout)
+            smtp.login(self.config["usuario"], self.config["clave"])
+        except smtplib.SMTPAuthenticationError as error:
+            raise ErrorCanal(f"El servidor rechazó usuario o clave (SMTP {error.smtp_code}).") from None
+        except (OSError, smtplib.SMTPException) as error:
+            raise ErrorCanal(
+                f"No se pudo conectar o iniciar sesión en {servidor}:{puerto} ({type(error).__name__})."
+            ) from None
+        self._smtp = smtp
+
+    def _descartar_conexion(self) -> None:
+        if self._smtp is not None:
+            try:
+                self._smtp.close()
+            except Exception:
+                pass
+        self._smtp = None
+
+    def enviar(self, caso: dict[str, Any]) -> str:
+        validar_destinatario(caso["destinatario"], permitir_prueba=False)
+        mensaje = construir_mensaje(caso, self.remitente)
+        if self._smtp is None:
+            self._conectar()
+        try:
+            rechazados = self._smtp.send_message(mensaje)
+        except smtplib.SMTPRecipientsRefused as error:
+            codigo, texto = next(iter(error.recipients.values()))
+            detalle = f"SMTP {codigo}: {texto.decode(errors='replace') if isinstance(texto, bytes) else texto}"
+            if 500 <= codigo < 600:
+                raise ErrorEnvioPermanente(f"Destinatario rechazado ({detalle})") from None
+            raise ErrorEnvio(f"Destinatario rechazado temporalmente ({detalle})") from None
+        except smtplib.SMTPSenderRefused as error:
+            raise ErrorCanal(f"El servidor rechazó el remitente (SMTP {error.smtp_code}).") from None
+        except smtplib.SMTPDataError as error:
+            if 500 <= error.smtp_code < 600:
+                raise ErrorEnvioPermanente(f"Mensaje rechazado (SMTP {error.smtp_code})") from None
+            raise ErrorEnvio(f"Mensaje rechazado temporalmente (SMTP {error.smtp_code})") from None
+        except (smtplib.SMTPServerDisconnected, socket.timeout, ConnectionError) as error:
+            self._descartar_conexion()  # el próximo caso reconecta
+            raise ErrorEnvio(f"Conexión con el servidor interrumpida ({type(error).__name__})") from None
+        if rechazados:
+            raise ErrorEnvioPermanente(f"El servidor rechazó: {', '.join(rechazados)}")
+        return f"SMTP 250 OK {mensaje['Message-ID']}"
+
+    def cerrar(self) -> None:
+        if self._smtp is not None:
+            try:
+                self._smtp.quit()
+            except Exception:
+                pass
+        self._smtp = None

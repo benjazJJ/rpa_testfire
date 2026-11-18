@@ -43,9 +43,11 @@ sys.path.insert(0, str(RAIZ))
 
 from src.bitacora import Bitacora, crear_id_ejecucion  # noqa: E402
 from src.canales_correo import (  # noqa: E402
-    CanalSimulacion, ErrorCanal, ErrorEnvio, ErrorEnvioPermanente,
+    CanalSimulacion, CanalSMTP, ErrorCanal, ErrorEnvio, ErrorEnvioPermanente,
 )
+from src.config_correo import cargar_config_correo, describir  # noqa: E402
 from src.cola_correos import ENVIADO, FALLIDO, RUTA_COLA, ColaCorreos  # noqa: E402
+from src.rutas import carpeta_salida, ultimo_archivo  # noqa: E402
 
 TOPE_REAL = 50
 HOJA_TRACKER = "Seguimiento de envíos"
@@ -59,8 +61,9 @@ def crear_canal(nombre: str, args) -> Any:
     if nombre == "simulacion":
         carpeta = args.carpeta_simulacion or (RAIZ / "data" / "salida" / "correos_simulados")
         return CanalSimulacion(carpeta, fallos_pasajeros=set(args.demo_fallo_pasajero or ()))
-    # Aquí se enchufa el canal real (Outlook / SMTP) cuando se defina.
-    raise ValueError(f"Canal no disponible todavía: {nombre}")
+    if nombre == "smtp":
+        return CanalSMTP(cargar_config_correo())
+    raise ValueError(f"Canal desconocido: {nombre} (usa simulacion o smtp)")
 
 
 def procesar(cola: ColaCorreos, canal, bitacora: Bitacora, max_envios: int, pausa: float) -> dict[str, Any]:
@@ -69,10 +72,16 @@ def procesar(cola: ColaCorreos, canal, bitacora: Bitacora, max_envios: int, paus
     if liberados:
         bitacora.advertencia("Performer: %d casos atascados EN_PROCESO volvieron a PENDIENTE.", liberados)
 
+    # Cada caso se intenta como máximo 2 veces por corrida (el reintento va
+    # al final). Reintentar en el mismo segundo un "servidor ocupado" no
+    # sirve: el intento que queda se hace en la próxima corrida.
+    intentos_corrida: dict[int, int] = {}
     while max_envios == 0 or conteo["procesados"] < max_envios:
-        caso = cola.tomar_siguiente(bitacora.id_ejecucion)
+        excluir = [i for i, n in intentos_corrida.items() if n >= 2]
+        caso = cola.tomar_siguiente(bitacora.id_ejecucion, excluir=excluir)
         if caso is None:
             break
+        intentos_corrida[caso["id"]] = intentos_corrida.get(caso["id"], 0) + 1
         conteo["procesados"] += 1
         etiqueta = f"caso {caso['id']} -> {caso['destinatario']} (intento {caso['intentos']}/{caso['max_intentos']})"
         try:
@@ -116,7 +125,8 @@ def exportar_tracker(cola: ColaCorreos, excel: Path, lote: str | None, bitacora:
         hoja.append([f"{k}: {v}" for k, v in resumen.items()])
         hoja.append([])
         columnas = ["id", "lote", "destinatario", "asunto", "casos", "prioridad", "estado", "intentos",
-                    "ultimo_error", "creado_en", "tomado_en", "procesado_en", "ejecucion_performer", "pc_performer"]
+                    "ultimo_error", "creado_en", "tomado_en", "procesado_en", "ejecucion_performer", "pc_performer",
+                    "respuesta", "respuesta_de", "respuesta_en"]
         hoja.append(columnas)
         for celda in hoja[4]:
             celda.font = Font(bold=True)
@@ -128,7 +138,7 @@ def exportar_tracker(cola: ColaCorreos, excel: Path, lote: str | None, bitacora:
             if color:
                 hoja.cell(row=hoja.max_row, column=columnas.index("estado") + 1).fill = PatternFill("solid", fgColor=color)
         hoja.freeze_panes = "A5"
-        for letra, ancho in zip("ABCDEFGHIJKLMN", (6, 22, 30, 50, 30, 9, 12, 9, 50, 20, 20, 20, 32, 16)):
+        for letra, ancho in zip("ABCDEFGHIJKLMNOPQ", (6, 22, 30, 50, 30, 9, 12, 9, 50, 20, 20, 20, 32, 16, 12, 30, 20)):
             hoja.column_dimensions[letra].width = ancho
 
     try:
@@ -151,12 +161,15 @@ def exportar_tracker(cola: ColaCorreos, excel: Path, lote: str | None, bitacora:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Performer: envía los correos de la cola.")
-    parser.add_argument("--canal", default="simulacion", help="simulacion (por ahora)")
+    parser.add_argument("--canal", default="simulacion", choices=["simulacion", "smtp"],
+                        help="simulacion (guarda .eml) o smtp (envío real con el servidor de config.json)")
     parser.add_argument("--max-envios", type=int, default=None,
                         help="Tope por ejecución (0 = sin tope; solo en simulación). Real: 20 por defecto")
     parser.add_argument("--pausa", type=float, default=None, help="Segundos entre correos (real: 10)")
     parser.add_argument("--cola", type=Path, default=RUTA_COLA)
     parser.add_argument("--exportar-excel", type=Path, help="Excel donde dejar la hoja de seguimiento")
+    parser.add_argument("--exportar-ultimo", action="store_true",
+                        help="Exporta el tracker al reporte_final más reciente de la carpeta de salida")
     parser.add_argument("--lote", help="Lote a mostrar en el tracker exportado (por defecto, todos)")
     parser.add_argument("--carpeta-simulacion", type=Path, help="Dónde guardar los .eml simulados")
     parser.add_argument("--demo-fallo-pasajero", type=int, nargs="*",
@@ -183,7 +196,13 @@ def main(argv: list[str] | None = None) -> int:
         pausa = args.pausa or 0.0
 
     bitacora.info("Performer: canal=%s, tope=%s, pausa=%ss", canal.nombre, max_envios or "sin tope", pausa)
-    conteo = procesar(cola, canal, bitacora, max_envios, pausa)
+    if canal.es_real:
+        bitacora.info("Performer: servidor %s", describir(canal.config))
+    try:
+        conteo = procesar(cola, canal, bitacora, max_envios, pausa)
+    finally:
+        if hasattr(canal, "cerrar"):
+            canal.cerrar()
     resumen = cola.resumen()
     estado = "Fallido" if conteo["detenido_por"] else (
         "Advertencia" if conteo["errores"] or conteo["fallidos"] else "Exitoso")
@@ -195,6 +214,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     tracker = None
+    if args.exportar_ultimo and not args.exportar_excel:
+        try:
+            args.exportar_excel = ultimo_archivo(carpeta_salida(), "reporte_final_*.xlsx")
+        except FileNotFoundError as error:
+            bitacora.advertencia("No se exportó el tracker: %s", error)
     if args.exportar_excel:
         inicio_export = time.perf_counter()
         tracker = exportar_tracker(cola, args.exportar_excel, args.lote, bitacora)
