@@ -102,7 +102,8 @@ def escribir_hoja_referencia(libro, dolar: dict[str, Any], filas_convertidas: in
         ("Valor usado (CLP por USD)", float(dolar["valor"])),
         ("Fecha del valor", dolar.get("fecha_valor", "")),
         ("Consultado en", dolar.get("consultado_en", "")),
-        ("Origen del dato", "API en línea" if dolar["origen"] == "api" else f"Caché local ({dolar.get('motivo_cache', '')})"),
+        ("Origen del dato", {"api": "API en línea", "cache": "Caché local", "respaldo": "Valor de respaldo del repo"}[dolar["origen"]]
+         + ("" if dolar["origen"] == "api" else f" (API falló: {dolar.get('motivo_cache', '')})")),
         ("Código HTTP", dolar.get("codigo_http") or "sin respuesta"),
         ("Filas convertidas a CLP", filas_convertidas),
         ("Fórmula", "monto_clp = monto (USD) x valor del dólar, redondeado a pesos"),

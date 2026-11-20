@@ -22,7 +22,9 @@ Manejo de errores:
 - Error 4xx o JSON inválido: no se reintenta (repetir no lo arregla).
 - Si todo falla, se usa el último valor bueno guardado en caché
   (``data/cache/dolar_ultimo.json``) y se informa ``origen = "cache"``.
-  Si tampoco hay caché, se lanza ``ErrorApiDolar``.
+  Si el PC nunca ha tenido caché (primera ejecución en un PC nuevo), se usa
+  el valor de respaldo versionado en el repo (``data/referencia/dolar_respaldo.json``)
+  y se informa ``origen = "respaldo"``. Si tampoco existe, se lanza ``ErrorApiDolar``.
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ import requests
 URL_DOLAR = "https://mindicador.cl/api/dolar"
 RAIZ_PROYECTO = Path(__file__).resolve().parent.parent
 RUTA_CACHE = RAIZ_PROYECTO / "data" / "cache" / "dolar_ultimo.json"
+RUTA_RESPALDO = RAIZ_PROYECTO / "data" / "referencia" / "dolar_respaldo.json"
 RANGO_VALIDO = (Decimal("300"), Decimal("3000"))
 CABECERAS = {"User-Agent": "RPA-TestFire/1.0 (proyecto academico ATY1102)"}
 
@@ -116,8 +119,9 @@ def _leer_cache(ruta: Path) -> dict[str, Any] | None:
 def obtener_dolar(
     url: str = URL_DOLAR,
     intentos: int = 3,
-    timeout: int = 10,
+    timeout: int = 20,
     ruta_cache: Path = RUTA_CACHE,
+    ruta_respaldo: Path = RUTA_RESPALDO,
     bitacora=None,
 ) -> dict[str, Any]:
     """
@@ -171,7 +175,14 @@ def obtener_dolar(
     if bitacora:
         bitacora.advertencia("API dólar falló (%s); se intenta usar la caché.", ultimo_error)
     cache = _leer_cache(ruta_cache)
+    origen = "cache"
     if cache is None:
-        raise ErrorApiDolar(f"La API del dólar falló ({ultimo_error}) y no hay caché.")
-    cache.update(origen="cache", codigo_http=codigo_http, motivo_cache=ultimo_error)
+        cache = _leer_cache(ruta_respaldo)
+        origen = "respaldo"
+        if cache is None:
+            raise ErrorApiDolar(f"La API del dólar falló ({ultimo_error}) y no hay caché.")
+        if bitacora:
+            bitacora.advertencia("Sin caché en este PC: se usa el valor de respaldo del repo (%s CLP, fecha %s).",
+                                 cache["valor"], cache.get("fecha_valor"))
+    cache.update(origen=origen, codigo_http=codigo_http, motivo_cache=ultimo_error)
     return cache

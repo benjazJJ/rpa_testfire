@@ -83,7 +83,7 @@ def test_api_4xx_no_reintenta_y_sin_cache_falla(monkeypatch, tmp_path):
     llamadas = []
     monkeypatch.setattr(api_dolar.requests, "get", lambda *a, **k: llamadas.append(1) or RespuestaFalsa(404))
     with pytest.raises(api_dolar.ErrorApiDolar):
-        api_dolar.obtener_dolar(ruta_cache=tmp_path / "no_hay.json")
+        api_dolar.obtener_dolar(ruta_cache=tmp_path / "no_hay.json", ruta_respaldo=tmp_path / "tampoco.json")
     assert len(llamadas) == 1
 
 
@@ -194,3 +194,9 @@ def test_demo_volumen_solo_usa_example_com():
     assert len(casos) == 50
     assert all(c["destinatario"].endswith("@example.com") for c in casos)
     assert casos[6]["destinatario"] == "analista@@example.com"
+
+
+def test_api_caida_en_pc_nuevo_usa_el_respaldo_del_repo(monkeypatch, tmp_path):
+    monkeypatch.setattr(api_dolar.requests, "get", lambda *a, **k: RespuestaFalsa(404))
+    r = api_dolar.obtener_dolar(ruta_cache=tmp_path / "no_hay.json")
+    assert r["origen"] == "respaldo" and r["valor"] > 0
