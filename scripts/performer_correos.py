@@ -46,7 +46,7 @@ from src.canales_correo import (  # noqa: E402
     CanalSimulacion, CanalSMTP, ErrorCanal, ErrorEnvio, ErrorEnvioPermanente,
 )
 from src.config_correo import cargar_config_correo, describir  # noqa: E402
-from src.cola_correos import ENVIADO, FALLIDO, RUTA_COLA, ColaCorreos  # noqa: E402
+from src.cola_correos import ENVIADO, FALLIDO, abrir_cola  # noqa: E402
 from src.rutas import carpeta_salida, ultimo_archivo  # noqa: E402
 
 TOPE_REAL = 50
@@ -166,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-envios", type=int, default=None,
                         help="Tope por ejecución (0 = sin tope; solo en simulación). Real: 20 por defecto")
     parser.add_argument("--pausa", type=float, default=None, help="Segundos entre correos (real: 10)")
-    parser.add_argument("--cola", type=Path, default=RUTA_COLA)
+    parser.add_argument("--cola", type=Path, default=None, help="SQLite local para pruebas")
     parser.add_argument("--exportar-excel", type=Path, help="Excel donde dejar la hoja de seguimiento")
     parser.add_argument("--exportar-ultimo", action="store_true",
                         help="Exporta el tracker al reporte_final más reciente de la carpeta de salida")
@@ -182,7 +182,8 @@ def main(argv: list[str] | None = None) -> int:
     inicio = time.perf_counter()
     try:
         canal = crear_canal(args.canal, args)
-        cola = ColaCorreos(args.cola)
+        cola = abrir_cola(args.cola, avisar=bitacora.info)
+        bitacora.info("Performer: cola %s", "COMPARTIDA (Neon)" if cola.compartida else "local (SQLite)")
     except Exception as error:
         bitacora.evento("Performer", "Procesar cola de correos", "Fallido", str(error), inicio)
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))

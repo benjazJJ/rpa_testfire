@@ -103,6 +103,33 @@ Nada más cambia entre PCs.
 
 **Demo**: `demo_cola_1000.bat`, todo en modo simulación.
 
+## Dos PC: encolador y procesador con cola compartida (Neon)
+
+El robot se divide en dos, como pidió el profesor:
+
+| PC | Robot | Qué hace |
+|---|---|---|
+| PC de Gustavo | `RPA_TestFire_Encolador` | Login, extracción, conciliación, API dólar, Excel y **encolar** |
+| Cualquier PC (laboratorio Duoc) | `RPA_TestFire_Procesador` | **Leer la cola**, enviar correos, resumen al supervisor y clasificar respuestas |
+
+La cola vive en una base Postgres gratuita en Neon, así los dos PC ven los mismos casos:
+
+- **Encolar:** BLOQUEAR (`pg_advisory_xact_lock`) → leer la entrada → encolar → DESBLOQUEAR. Si otro PC está encolando, espera su turno.
+- **Leer la cola:** cada caso se toma con `FOR UPDATE SKIP LOCKED`, así dos procesadores nunca toman el mismo caso.
+- El Excel adjunto se guarda en la base, y el procesador lo descarga. No necesita el disco del encolador.
+
+### Preparar un PC (una sola vez)
+
+1. Descargar el repo (`git clone` o *Code → Download ZIP* en GitHub).
+2. Copiar `config\config.json` por USB o correo, **nunca a GitHub**. Debe tener la sección `"cola": {"url": "postgresql://...?sslmode=require"}`.
+3. Doble clic en `instalar_procesador.bat` (o `instalar_encolador.bat` en el PC de Gustavo). El instalador:
+   - revisa Python e instala las librerías;
+   - prueba la cola y el correo;
+   - genera `rocketbot\listo\RPA_TestFire_<Rol>_<PC>.json` con las rutas de ese PC y la clave.
+4. En Rocketbot Studio, importar ese archivo y ejecutarlo.
+
+`scripts\probar_cola.bat` comprueba en cualquier momento que el PC llega a Neon (puerto 5432).
+
 ## Mejora creativa: ejecución programada con horario permitido
 
 | Archivo | Qué hace |

@@ -43,7 +43,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
 from src.bitacora import Bitacora, crear_id_ejecucion  # noqa: E402
-from src.cola_correos import RUTA_COLA, ColaCorreos  # noqa: E402
+from src.cola_correos import abrir_cola  # noqa: E402
 from src.datos_sinteticos import GeneradorDatosSinteticos  # noqa: E402
 from src.rutas import carpeta_salida, ultimo_archivo  # noqa: E402
 
@@ -180,7 +180,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--destinatarios", help="Correos separados por coma (si no, config.json)")
     parser.add_argument("--lote", help="Nombre del lote (por defecto, fecha y hora)")
     parser.add_argument("--sin-adjunto", action="store_true", help="No adjuntar el Excel (modo agrupado)")
-    parser.add_argument("--cola", type=Path, default=RUTA_COLA, help="Ruta de la base SQLite de la cola")
+    parser.add_argument("--cola", type=Path, default=None,
+                        help="SQLite local para pruebas (por defecto: Neon si está en config.json)")
     parser.add_argument("--demo-volumen", type=int, default=0, help="Encola N casos sintéticos (@example.com)")
     parser.add_argument("--demo-invalido", type=int, default=None, help="Caso N de la demo con dirección inválida")
     parser.add_argument("--id-ejecucion", default=None)
@@ -192,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if not args.excel and not args.demo_volumen:
             args.excel = ultimo_archivo(carpeta_salida(), "reporte_final_2*.xlsx")
+        adjunto = None
         excepciones = leer_excepciones(args.excel) if args.excel else []
         if args.demo_volumen:
             lote = args.lote or f"DEMO_{datetime.now():%Y%m%d_%H%M%S}"
@@ -209,7 +211,9 @@ def main(argv: list[str] | None = None) -> int:
             casos = (armar_agrupado(excepciones, destinatarios, lote, adjunto) if args.modo == "agrupado"
                      else armar_por_caso(excepciones, destinatarios, lote))
 
-        resultado_cola = ColaCorreos(args.cola).encolar(casos, lote, bitacora.id_ejecucion)
+        cola = abrir_cola(args.cola, avisar=bitacora.info)
+        bitacora.info("Dispatcher: cola %s", "COMPARTIDA (Neon)" if cola.compartida else "local (SQLite)")
+        resultado_cola = cola.encolar(casos, lote, bitacora.id_ejecucion, adjunto=adjunto)
     except Exception as error:
         bitacora.evento("Dispatcher", "Encolar correos", "Fallido", str(error), inicio)
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))

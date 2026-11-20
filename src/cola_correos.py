@@ -100,7 +100,10 @@ class ColaCorreos:
 
     # ------------------------------------------------------------- dispatcher
 
-    def encolar(self, casos: list[dict[str, Any]], lote: str, id_ejecucion: str) -> dict[str, int]:
+    compartida = False
+
+    def encolar(self, casos: list[dict[str, Any]], lote: str, id_ejecucion: str,
+                adjunto: Path | None = None) -> dict[str, int]:
         """
         Inserta los casos como PENDIENTE. Los que ya existen (misma
         ``clave_unica``) se omiten: re-ejecutar el dispatcher no duplica correos.
@@ -231,6 +234,15 @@ class ColaCorreos:
         conteo["TOTAL"] = sum(conteo[e] for e in ESTADOS)
         return conteo
 
+    def ultimo_lote(self) -> str | None:
+        with self._conexion() as con:
+            fila = con.execute("SELECT lote FROM cola_correos ORDER BY id DESC LIMIT 1").fetchone()
+        return fila["lote"] if fila else None
+
+    def descargar_ultimo_adjunto(self, destino: Path) -> Path | None:
+        """En la cola local el adjunto ya es un archivo de este PC: no hay nada que descargar."""
+        return None
+
     def listar(self, lote: str | None = None) -> list[dict[str, Any]]:
         filtro, params = ("WHERE lote = ?", (lote,)) if lote else ("", ())
         with self._conexion() as con:
@@ -242,3 +254,36 @@ class ColaCorreos:
                 params,
             ).fetchall()
         return [dict(f) for f in filas]
+
+
+# ------------------------------------------------------------------ fábrica
+
+def url_cola_compartida() -> str | None:
+    """URL de la cola en Neon (config.json -> "cola": {"url"} o RPA_COLA_URL), o None."""
+    import os
+
+    if os.environ.get("RPA_COLA_URL"):
+        return os.environ["RPA_COLA_URL"]
+    try:
+        config = json.loads((RAIZ_PROYECTO / "config" / "config.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    url = str((config.get("cola") or {}).get("url", "")).strip()
+    return url if url.startswith("postgres") else None
+
+
+def abrir_cola(ruta: Path | None = None, avisar=None):
+    """
+    La cola que corresponde a este PC:
+    - ``ruta`` indicada (pruebas y demo)  -> SQLite local en esa ruta;
+    - URL de Neon en config.json         -> cola COMPARTIDA entre PCs (Postgres);
+    - nada configurado                    -> SQLite local en data/cola/.
+    """
+    if ruta is not None:
+        return ColaCorreos(ruta)
+    url = url_cola_compartida()
+    if url:
+        from src.cola_postgres import ColaCorreosPG
+
+        return ColaCorreosPG(url, avisar=avisar)
+    return ColaCorreos(RUTA_COLA)

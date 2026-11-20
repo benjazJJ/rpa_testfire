@@ -45,7 +45,7 @@ sys.path.insert(0, str(RAIZ))
 
 from src.bitacora import Bitacora, crear_id_ejecucion  # noqa: E402
 from src.canales_correo import PATRON_CODIGO  # noqa: E402
-from src.cola_correos import RUTA_COLA, ColaCorreos  # noqa: E402
+from src.cola_correos import abrir_cola  # noqa: E402
 from src.config_correo import cargar_config_correo, describir  # noqa: E402
 
 APROBADO, RECHAZADO, REVISAR = "APROBADO", "RECHAZADO", "REVISAR"
@@ -243,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Clasifica las respuestas APROBADO/RECHAZADO por IMAP.")
     parser.add_argument("--solo-leer", action="store_true", help="No mueve correos ni toca el tracker")
     parser.add_argument("--max", type=int, default=200, help="Máximo de correos por ejecución")
-    parser.add_argument("--cola", type=Path, default=RUTA_COLA)
+    parser.add_argument("--cola", type=Path, default=None, help="SQLite local para pruebas")
     parser.add_argument("--id-ejecucion", default=None)
     parser.add_argument("--sin-sheets", action="store_true")
     args = parser.parse_args(argv)
@@ -265,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        resumen = clasificar(buzon, ColaCorreos(args.cola), config["remitente"], bitacora,
+        resumen = clasificar(buzon, abrir_cola(args.cola), config["remitente"], bitacora,
                              solo_leer=args.solo_leer, maximo=args.max)
     finally:
         buzon.cerrar()

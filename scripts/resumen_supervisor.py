@@ -29,7 +29,8 @@ from openpyxl import load_workbook
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
-from src.cola_correos import RUTA_COLA, ColaCorreos  # noqa: E402
+from src.cola_correos import abrir_cola  # noqa: E402
+from src.bitacora import Bitacora, crear_id_ejecucion  # noqa: E402
 from src.config_correo import RUTA_CONFIG  # noqa: E402
 from src.rutas import carpeta_salida, ultimo_archivo  # noqa: E402
 
@@ -58,14 +59,9 @@ def contar_excepciones(excel: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prepara el correo de resumen para el supervisor.")
-    parser.add_argument("--excel", type=Path, help="Reporte final (por defecto, el más reciente)")
-    parser.add_argument("--cola", type=Path, default=RUTA_COLA)
+    parser.add_argument("--excel", type=Path, help="Reporte final (por defecto, el del último lote)")
+    parser.add_argument("--cola", type=Path, default=None, help="SQLite local para pruebas")
     args = parser.parse_args(argv)
-    try:
-        args.excel = args.excel or ultimo_archivo(carpeta_salida(), "reporte_final_2*.xlsx")
-    except FileNotFoundError as error:
-        print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
-        return 2
 
     try:
         config = json.loads(RUTA_CONFIG.read_text(encoding="utf-8")).get("correo", {})
@@ -77,27 +73,43 @@ def main(argv: list[str] | None = None) -> int:
                          ensure_ascii=False))
         return 2
 
-    cola = ColaCorreos(args.cola).resumen()
-    ref = leer_referencia(args.excel)
-    excepciones = contar_excepciones(args.excel)
+    cola = abrir_cola(args.cola)
+    salida = carpeta_salida()
+    salida.mkdir(parents=True, exist_ok=True)
+    adjunto = salida / "reporte_final_ultimo.xlsx"
+    try:
+        if args.excel:
+            shutil.copyfile(args.excel, adjunto)
+        elif not (cola.compartida and cola.descargar_ultimo_adjunto(adjunto)):
+            # Cola local (un solo PC): el reporte está en la carpeta de salida.
+            shutil.copyfile(ultimo_archivo(salida, "reporte_final_2*.xlsx"), adjunto)
+    except FileNotFoundError as error:
+        print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
+        return 2
+
+    # El reporte que va al supervisor lleva el seguimiento de envíos actualizado.
+    from scripts.performer_correos import exportar_tracker
+
+    lote = cola.ultimo_lote()
+    exportar_tracker(cola, adjunto, lote, Bitacora(crear_id_ejecucion(), usar_sheets=False))
+    resumen = cola.resumen(lote)
+    ref = leer_referencia(adjunto)
+    excepciones = contar_excepciones(adjunto)
     hoy = datetime.now().strftime("%d-%m-%Y %H:%M")
     asunto = f"[RPA TestFire] Resumen de ejecución {hoy}: {excepciones} excepciones"
     mensaje = (
         f"Hola,\n\nResumen de la ejecución del RPA TestFire ({hoy}):\n\n"
+        f"- Lote: {lote or 's/d'}\n"
         f"- Excepciones de conciliación: {excepciones}\n"
         f"- Dólar usado: {ref.get('dolar', 's/d')} CLP ({ref.get('fecha', 's/d')}, {ref.get('origen', 's/d')})\n"
-        f"- Correos a responsables: {cola['ENVIADO']} enviados, {cola['ERROR']} por reintentar, "
-        f"{cola['FALLIDO']} fallidos, {cola['PENDIENTE']} pendientes\n\n"
+        f"- Correos a responsables: {resumen['ENVIADO']} enviados, {resumen['ERROR']} por reintentar, "
+        f"{resumen['FALLIDO']} fallidos, {resumen['PENDIENTE']} pendientes\n\n"
         "Se adjunta el reporte final con las hojas Discrepancias, Referencia externa y "
         "Seguimiento de envíos.\n\n"
         "Correo generado automáticamente por el RPA TestFire (proyecto académico ATY1102)."
     )
-    salida = args.excel.resolve().parent
-    adjunto = salida / "reporte_final_ultimo.xlsx"
-    if args.excel.resolve() != adjunto:
-        shutil.copyfile(args.excel, adjunto)
     (salida / "mensaje_supervisor.txt").write_text(mensaje, encoding="utf-8")
-    print(json.dumps({"ok": True, "para": para, "asunto": asunto, "mensaje": mensaje,
+    print(json.dumps({"ok": True, "para": para, "asunto": asunto, "mensaje": mensaje, "lote": lote,
                       "adjunto": str(adjunto)}, ensure_ascii=False))
     return 0
 
