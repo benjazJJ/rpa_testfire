@@ -21,24 +21,23 @@ Diagrama completo, con decisiones y manejo de errores: [`topologia.png`](topolog
 | 10 | 4a · Dispatcher | `dispatcher.bat` |
 | 11 | 4b · Performer | `performer.bat`: envío real por SMTP |
 | 12 | 4c · Correo al supervisor | `resumen_supervisor.bat` + comandos **Configurar servidor** y **Enviar email SMTP** de Rocketbot |
-| 13 | 4d · Recepción | Comando **Listar email nuevos IMAP** de Rocketbot |
-| 14 | 4d · Clasificación | `clasificar.bat` |
-| 15 | 5 · Cierre | Mensaje final OK o con errores |
+| 13 | 4d · Recepción y clasificación | `clasificar.bat` (lee por IMAP y mueve a carpetas) |
+| 14 | 5 · Cierre | Mensaje final OK o con errores |
 
 **Cómo encadena los pasos.** Cada subproceso es un `If {continuar}`. Adentro tiene tres comandos:
 - **Ejecutar archivo** del `.bat`. Lo que el `.bat` imprime queda en `{res_...}`.
 - Un **If** que revisa si ese texto trae `RESULTADO=OK`.
 - Si no lo trae, un **log de error** y `continuar = False`. Los subprocesos siguientes no corren y el cierre informa "fin CON ERRORES".
 
-**Lo que se agrega a mano (3 comandos).** El v5 no traía comandos de correo, así que no tenía de dónde copiar su formato. En las líneas 12 y 13 hay mensajes rojos que dicen **"AGREGAR AQUÍ"**: se reemplaza cada uno por el comando indicado y después se borra el mensaje.
+**Correo en Rocketbot.** El bloque 12 trae los comandos **Configurar servidor** y **Enviar email SMTP**, ya configurados:
+- Para: `{correo_supervisor}`
+- Asunto: `[RPA TestFire] Resumen de ejecución`
+- Mensaje: `{mensaje_supervisor}`
+- Adjunto: `{ruta_salida}\\reporte_final_ultimo.xlsx`
 
-1. **Configurar servidor**: los datos de la diapositiva.
-2. **Enviar email SMTP**:
-    - Para: `{correo_supervisor}`
-    - Asunto: `[RPA TestFire] Resumen de ejecución`
-    - Mensaje: `{mensaje_supervisor}`
-    - Adjunto: `{ruta_salida}\reporte_final_ultimo.xlsx`
-3. **Listar email nuevos IMAP**.
+La recepción y la clasificación las hace `clasificar.bat` (bloque 13).
+
+**La clave del correo no está en el repo.** En la copia de GitHub, *Configurar servidor* dice `COMPLETAR_CLAVE_DEL_CORREO`, porque el repo es público. El `.json` que se usa en cada PC lleva la clave real, o se escribe una vez en ese comando dentro de Rocketbot.
 
 **Variables propias de cada PC** (pestaña *Variables* de Rocketbot):
 
