@@ -67,8 +67,43 @@ def dentro_de_horario(momento: datetime, horario: dict[str, Any]) -> tuple[bool,
     return True, f"dentro del horario permitido ({permitido})"
 
 
-def revisar_instalacion(config: dict[str, Any]) -> int:
+PASOS_PROCESADOR = (
+    ("4b · Performer: enviar la cola", ["scripts\\performer.bat"]),
+    ("4c · Resumen al supervisor", [sys.executable, "scripts/resumen_supervisor.py", "--enviar"]),
+    ("4d · Clasificar respuestas", ["scripts\\clasificar.bat"]),
+)
+
+
+def ejecutar_procesador_con_scripts(bitacora, inicio) -> int:
+    resultados = {}
+    for nombre, comando in PASOS_PROCESADOR:
+        t0 = time.perf_counter()
+        if comando[0].endswith(".bat") and sys.platform != "win32":
+            resultados[nombre] = "omitido (no es Windows)"
+            continue
+        proceso = subprocess.run(comando if not comando[0].endswith(".bat") else ["cmd", "/c", comando[0]],
+                                 cwd=RAIZ, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        salida = (proceso.stdout or "").strip()
+        sin_novedades = proceso.returncode == 4 or "sin_novedades" in salida
+        ok = proceso.returncode == 0 or sin_novedades
+        detalle = "sin novedades: no se reenvía" if sin_novedades else (salida.splitlines() or [""])[-1][:300]
+        bitacora.evento("Programador", f"Procesador {nombre}", "Exitoso" if ok else "Fallido", detalle, t0)
+        resultados[nombre] = "OK" if ok else "ERROR"
+        if not ok:
+            break  # igual que en Rocketbot: si un paso falla, se detiene la cadena
+    todo_ok = all(v != "ERROR" for v in resultados.values())
+    bitacora.evento("Programador", "Procesador (modo horario) terminó", "Exitoso" if todo_ok else "Fallido",
+                    json.dumps(resultados, ensure_ascii=False), inicio)
+    print(json.dumps({"ok": todo_ok, "motor": "scripts", "pasos": resultados}, ensure_ascii=False))
+    return 0 if todo_ok else 2
+
+
+def revisar_instalacion(config: dict[str, Any], rol: str | None = None) -> int:
     """Para encender_robots.bat: avisa antes de programar si Rocketbot no se va a poder lanzar."""
+    if rol == "procesador":
+        print("[OK] En modo horario el Procesador corre sus pasos con los scripts del repo "
+              "(no necesita la licencia de producción de Rocketbot).")
+        return 0
     exe, db = config.get("rocketbot_exe"), config.get("db")
     errores = []
     if not exe or not Path(exe).exists():
@@ -79,6 +114,7 @@ def revisar_instalacion(config: dict[str, Any]) -> int:
         print(f"[X] {error}")
     if not errores:
         print(f"[OK] Rocketbot: {exe}")
+        print("[!] Ojo: sin licencia de producción, Rocketbot no ejecuta robots desde la tarea programada.")
     return 1 if errores else 0
 
 
@@ -94,7 +130,7 @@ def main(argv: list[str] | None = None, ahora: datetime | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.revisar_instalacion:
-        return revisar_instalacion(cargar_config())
+        return revisar_instalacion(cargar_config(), args.rol)
 
     config = cargar_config()
     bitacora = Bitacora(crear_id_ejecucion(), usar_sheets=not args.sin_sheets)
@@ -118,6 +154,12 @@ def main(argv: list[str] | None = None, ahora: datetime | None = None) -> int:
     if args.solo_revisar:
         print(json.dumps({"ok": True, "permitido": permitido, "motivo": motivo}, ensure_ascii=False))
         return 0
+
+    if args.rol == "procesador":
+        # Rocketbot sin licencia de producción no ejecuta robots desde la línea de
+        # comandos, así que el modo horario corre los mismos pasos del Procesador
+        # con sus scripts (la ejecución manual en Rocketbot no cambia).
+        return ejecutar_procesador_con_scripts(bitacora, inicio)
 
     exe, robot, db = config.get("rocketbot_exe"), config.get("robot"), config.get("db")
     if args.rol:

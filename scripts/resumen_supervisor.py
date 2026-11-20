@@ -57,10 +57,37 @@ def contar_excepciones(excel: Path) -> int:
         return 0
 
 
+def enviar_resumen(para: str, asunto: str, mensaje: str, adjunto: Path) -> None:
+    """Mismo correo que arma Rocketbot con "Send email SMTP", enviado desde Python."""
+    from email.message import EmailMessage
+    from email.utils import formatdate
+
+    from src.canales_correo import CanalSMTP
+    from src.config_correo import cargar_config_correo
+
+    canal = CanalSMTP(cargar_config_correo())
+    correo = EmailMessage()
+    correo["From"] = canal.remitente
+    correo["To"] = para
+    correo["Subject"] = asunto
+    correo["Date"] = formatdate(localtime=True)
+    correo.set_content(mensaje)
+    correo.add_attachment(adjunto.read_bytes(), maintype="application",
+                          subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                          filename=adjunto.name)
+    canal._conectar()  # noqa: SLF001 (misma conexión SSL y errores que el performer)
+    try:
+        canal._smtp.send_message(correo)  # noqa: SLF001
+    finally:
+        canal.cerrar()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prepara el correo de resumen para el supervisor.")
     parser.add_argument("--excel", type=Path, help="Reporte final (por defecto, el del último lote)")
     parser.add_argument("--cola", type=Path, default=None, help="SQLite local para pruebas")
+    parser.add_argument("--enviar", action="store_true",
+                        help="Envía el resumen por SMTP desde Python (modo horario sin Rocketbot)")
     parser.add_argument("--siempre", action="store_true",
                         help="Prepara el resumen aunque nada haya cambiado desde el último")
     args = parser.parse_args(argv)
@@ -121,6 +148,12 @@ def main(argv: list[str] | None = None) -> int:
         "Correo generado automáticamente por el RPA TestFire (proyecto académico ATY1102)."
     )
     (salida / "mensaje_supervisor.txt").write_text(mensaje, encoding="utf-8")
+    if args.enviar:
+        try:
+            enviar_resumen(para, asunto, mensaje, adjunto)
+        except Exception as error:  # se informa y el lanzador lo registra como fallido
+            print(json.dumps({"ok": False, "error": f"No se pudo enviar el resumen: {error}"}, ensure_ascii=False))
+            return 2
     ruta_firma.write_text(firma, encoding="utf-8")
     print(json.dumps({"ok": True, "para": para, "asunto": asunto, "mensaje": mensaje, "lote": lote,
                       "adjunto": str(adjunto)}, ensure_ascii=False))
