@@ -46,6 +46,8 @@ def configurar(rol: str) -> Path:
     valores = {
         "ruta_repo": str(RAIZ),
         "ruta_salida": str(carpeta_salida()),
+        # El bloque "Open file XLSX" de Rocketbot solo acepta la ruta con "/".
+        "ruta_salida_xlsx": str(carpeta_salida()).replace("\\", "/"),
         "ruta_perfil_ff": str(Path.home() / "Rocketbot_FF_Profile").replace("\\", "/"),
     }
     for variable in proyecto["vars"]:
