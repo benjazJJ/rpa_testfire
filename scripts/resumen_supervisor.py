@@ -61,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prepara el correo de resumen para el supervisor.")
     parser.add_argument("--excel", type=Path, help="Reporte final (por defecto, el del último lote)")
     parser.add_argument("--cola", type=Path, default=None, help="SQLite local para pruebas")
+    parser.add_argument("--siempre", action="store_true",
+                        help="Prepara el resumen aunque nada haya cambiado desde el último")
     args = parser.parse_args(argv)
 
     try:
@@ -76,6 +78,16 @@ def main(argv: list[str] | None = None) -> int:
     cola = abrir_cola(args.cola)
     salida = carpeta_salida()
     salida.mkdir(parents=True, exist_ok=True)
+
+    # Modo horario: el Procesador corre cada 30 min. Si el lote y sus estados son los
+    # mismos que en el último resumen, no se vuelve a avisar al supervisor.
+    lote = cola.ultimo_lote()
+    firma = json.dumps({"lote": lote, "estados": cola.resumen(lote)}, sort_keys=True)
+    ruta_firma = salida / "resumen_ultimo.json"
+    if not args.siempre and not args.excel and ruta_firma.exists() \
+            and ruta_firma.read_text(encoding="utf-8") == firma:
+        print(json.dumps({"ok": True, "sin_novedades": True, "lote": lote}, ensure_ascii=False))
+        return 4
     adjunto = salida / "reporte_final_ultimo.xlsx"
     try:
         if args.excel:
@@ -109,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         "Correo generado automáticamente por el RPA TestFire (proyecto académico ATY1102)."
     )
     (salida / "mensaje_supervisor.txt").write_text(mensaje, encoding="utf-8")
+    ruta_firma.write_text(firma, encoding="utf-8")
     print(json.dumps({"ok": True, "para": para, "asunto": asunto, "mensaje": mensaje, "lote": lote,
                       "adjunto": str(adjunto)}, ensure_ascii=False))
     return 0

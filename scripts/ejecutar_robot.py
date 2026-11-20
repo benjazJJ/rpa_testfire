@@ -67,12 +67,34 @@ def dentro_de_horario(momento: datetime, horario: dict[str, Any]) -> tuple[bool,
     return True, f"dentro del horario permitido ({permitido})"
 
 
+def revisar_instalacion(config: dict[str, Any]) -> int:
+    """Para encender_robots.bat: avisa antes de programar si Rocketbot no se va a poder lanzar."""
+    exe, db = config.get("rocketbot_exe"), config.get("db")
+    errores = []
+    if not exe or not Path(exe).exists():
+        errores.append(f'rocketbot_exe: no existe "{exe}". Pon la ruta real de rocketbot.exe.')
+    if not db or not Path(db).exists():
+        errores.append(f'db: no existe "{db}". Pon la ruta de la base de robots de Rocketbot.')
+    for error in errores:
+        print(f"[X] {error}")
+    if not errores:
+        print(f"[OK] Rocketbot: {exe}")
+    return 1 if errores else 0
+
+
 def main(argv: list[str] | None = None, ahora: datetime | None = None) -> int:
     parser = argparse.ArgumentParser(description="Lanza el robot solo dentro del horario permitido.")
     parser.add_argument("--forzar", action="store_true", help="Ignora el horario (queda registrado)")
     parser.add_argument("--solo-revisar", action="store_true", help="Revisa el horario sin lanzar el robot")
+    parser.add_argument("--rol", choices=("encolador", "procesador"),
+                        help="Robot a lanzar: RPA_TestFire_Encolador o RPA_TestFire_Procesador")
+    parser.add_argument("--revisar-instalacion", action="store_true",
+                        help="Solo revisa que config.json tenga Rocketbot bien configurado")
     parser.add_argument("--sin-sheets", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.revisar_instalacion:
+        return revisar_instalacion(cargar_config())
 
     config = cargar_config()
     bitacora = Bitacora(crear_id_ejecucion(), usar_sheets=not args.sin_sheets)
@@ -98,6 +120,8 @@ def main(argv: list[str] | None = None, ahora: datetime | None = None) -> int:
         return 0
 
     exe, robot, db = config.get("rocketbot_exe"), config.get("robot"), config.get("db")
+    if args.rol:
+        robot = f"RPA_TestFire_{args.rol.capitalize()}"
     if not (exe and robot and db):
         mensaje = "Falta \"ejecucion\" en config.json (rocketbot_exe, robot y db)."
         bitacora.evento("Programador", "Lanzar robot Rocketbot", "Fallido", mensaje, inicio)

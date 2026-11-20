@@ -130,6 +130,19 @@ La cola vive en una base Postgres gratuita en Neon, así los dos PC ven los mism
 
 `scripts\probar_cola.bat` comprueba en cualquier momento que el PC llega a Neon (puerto 5432).
 
+## Modo horario: encender y apagar los robots
+
+Los robots corren solos solo si alguien los enciende, así no llegan avisos todos los días.
+
+| Botón | Qué hace |
+|---|---|
+| `encender_robots.bat` | Pregunta qué robot corre en ese PC y crea su tarea programada: **Encolador** de lunes a viernes a las 09:00; **Procesador** de lunes a viernes cada 30 min entre 08:00 y 18:00 |
+| `apagar_robots.bat` | Borra las tareas de ese PC. No borra la cola ni los datos |
+| `estado_robots.bat` | Muestra si están encendidos y cuándo corren la próxima vez |
+
+Encender y apagar quedan registrados en la Auditoría RPA. El Procesador solo avisa al supervisor cuando el lote cambió (si nada cambió: `SIN_NOVEDADES`, no hay correo).
+Requiere en `config.json` → `"ejecucion"`: `rocketbot_exe` y `db` con las rutas reales de ese PC.
+
 ## Mejora creativa: ejecución programada con horario permitido
 
 | Archivo | Qué hace |
