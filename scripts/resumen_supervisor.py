@@ -109,7 +109,8 @@ def main(argv: list[str] | None = None) -> int:
     # Modo horario: el Procesador corre cada 30 min. Si el lote y sus estados son los
     # mismos que en el último resumen, no se vuelve a avisar al supervisor.
     lote = cola.ultimo_lote()
-    firma = json.dumps({"lote": lote, "estados": cola.resumen(lote)}, sort_keys=True)
+    respuestas = sorted((str(f["id"]), f.get("respuesta") or "") for f in cola.listar(lote) if f.get("respuesta"))
+    firma = json.dumps({"lote": lote, "estados": cola.resumen(lote), "respuestas": respuestas}, sort_keys=True)
     ruta_firma = salida / "resumen_ultimo.json"
     if not args.siempre and not args.excel and ruta_firma.exists() \
             and ruta_firma.read_text(encoding="utf-8") == firma:
@@ -142,7 +143,11 @@ def main(argv: list[str] | None = None) -> int:
         f"- Excepciones de conciliación: {excepciones}\n"
         f"- Dólar usado: {ref.get('dolar', 's/d')} CLP ({ref.get('fecha', 's/d')}, {ref.get('origen', 's/d')})\n"
         f"- Correos a responsables: {resumen['ENVIADO']} enviados, {resumen['ERROR']} por reintentar, "
-        f"{resumen['FALLIDO']} fallidos, {resumen['PENDIENTE']} pendientes\n\n"
+        f"{resumen['FALLIDO']} fallidos, {resumen['PENDIENTE']} pendientes\n"
+        f"- Respuestas de los responsables: "
+        f"{sum(r == 'APROBADO' for _, r in respuestas)} aprobadas, "
+        f"{sum(r == 'RECHAZADO' for _, r in respuestas)} rechazadas, "
+        f"{sum(r == 'REVISAR' for _, r in respuestas)} por revisar\n\n"
         "Se adjunta el reporte final con las hojas Discrepancias, Referencia externa y "
         "Seguimiento de envíos.\n\n"
         "Correo generado automáticamente por el RPA TestFire (proyecto académico ATY1102)."
