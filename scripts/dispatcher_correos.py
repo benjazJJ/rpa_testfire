@@ -104,7 +104,7 @@ PIE = (
     "\nPara cerrar la revisión, responda este correo con APROBADO o RECHAZADO en el asunto "
     "o en la primera línea. El robot clasificará su respuesta automáticamente.\n\n"
     "Correo generado automáticamente por el RPA TestFire (proyecto académico ATY1102). "
-    "Datos de demo.testfire.net, sitio bancario ficticio: no contiene información real de clientes."
+    "Datos de demotestfire.azurewebsites.net, sitio bancario ficticio: no contiene información real de clientes."
 )
 
 
