@@ -1,0 +1,58 @@
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Arial, Helvetica, sans-serif", "fontSize": "15px", "primaryColor": "#e6f0fc", "primaryBorderColor": "#2a78d6", "primaryTextColor": "#0b0b0b", "lineColor": "#52514e", "clusterBkg": "#fcfcfb", "clusterBorder": "#c3c2b7"}, "flowchart": {"curve": "basis", "nodeSpacing": 28, "rankSpacing": 38}}}%%
+flowchart TB
+    INICIO(["Inicio<br/>Tarea programada 09:00 o ejecución manual"]):::evento
+    HORARIO{"¿Dentro del<br/>horario permitido?"}:::decision
+    FUERA["Registrar intento fuera de horario<br/>en el log y terminar"]:::error
+    INICIO --> HORARIO
+    HORARIO -- "No" --> FUERA
+    HORARIO -- "Sí" --> SP1
+
+    subgraph SP1 ["Subproceso 1 · Login"]
+        direction TB
+        L1["Abrir navegador en demo.testfire.net"] --> L2["Ingresar credenciales"]
+        L2 --> L3{"¿Login correcto?"}:::decision
+    end
+
+    subgraph SP2 ["Subproceso 2 · Extracción y consumo de API"]
+        direction TB
+        E1["Extraer Recent Transactions<br/>a consolidado.xlsx"] --> E2["Conciliar contra el maestro SQLite"]
+        E2 --> E3["GET mindicador.cl/api/dolar"]
+        E3 --> E4{"¿HTTP 200 y JSON válido?"}:::decision
+        E4 -- "No" --> E5["Usar último valor en caché<br/>y marcarlo en el log"]
+    end
+
+    subgraph SP3 ["Subproceso 3 · Integración en Excel"]
+        direction TB
+        X1["Agregar columna Monto CLP<br/>y hoja Referencia externa"] --> X2["Abrir el libro en Excel,<br/>guardar y cerrar"]
+    end
+
+    subgraph SP4 ["Subproceso 4 · Correo (dispatcher / performer)"]
+        direction TB
+        D1["4a · Dispatcher<br/>Leer excepciones y encolar<br/>1 correo por destinatario"] --> Q[("Cola / tracker<br/>SQLite")]:::datos
+        Q --> P1["4b · Performer<br/>Tomar el siguiente PENDIENTE"]
+        P1 --> P2{"¿Envío correcto?"}:::decision
+        P2 -- "Sí" --> P3["Marcar ENVIADO"]
+        P2 -- "No" --> P4["Marcar ERROR y seguir<br/>con el siguiente caso"]
+        P3 --> P5{"¿Quedan casos y<br/>no se alcanzó el tope?"}:::decision
+        P4 --> P5
+        P5 -- "Sí" --> P1
+        P5 -- "No" --> R1["4c · Recepción<br/>Leer respuestas y clasificar<br/>en carpetas"]
+    end
+
+    subgraph SP5 ["Subproceso 5 · Mejora creativa y cierre"]
+        direction TB
+        M1["Exportar tracker a la hoja<br/>Seguimiento de envíos"] --> M2["Registrar resumen en<br/>Auditoría RPA y archivo .log"]
+    end
+
+    L3 -- "Sí" --> E1
+    L3 -- "No, tras 3 intentos" --> ERR["Registrar error, avisar<br/>y terminar"]:::error
+    E4 -- "Sí" --> X1
+    E5 --> X1
+    X2 --> D1
+    R1 --> M1
+    M2 --> FIN(["Fin"]):::evento
+
+    classDef evento fill:#2a78d6,stroke:#2a78d6,color:#ffffff
+    classDef decision fill:#fff4d6,stroke:#c98500,color:#0b0b0b
+    classDef error fill:#fde8e8,stroke:#d03b3b,color:#0b0b0b
+    classDef datos fill:#e3f6ee,stroke:#199e70,color:#0b0b0b

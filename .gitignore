@@ -12,3 +12,10 @@ config/config.json
 data/entrada/*.db
 # Respaldos automáticos de scripts/regenerar_master_desde_reporte.py
 data/entrada/conciliacion_master_*.xlsx
+
+# Evaluación 3: cola de correos (tracker) y caché del dólar
+data/cola/
+data/cache/
+
+# Robots generados para cada PC (llevan la clave del correo)
+rocketbot/listo/

@@ -1,0 +1,20 @@
+{
+  "valor": "1008.79",
+  "fecha_valor": "2026-11-20",
+  "nombre": "Dólar observado",
+  "unidad": "Pesos",
+  "endpoint": "https://mindicador.cl/api/dolar",
+  "consultado_en": "2026-11-20T11:15:00",
+  "nota": "Valor de respaldo: solo se usa si la API falla y el PC aún no tiene caché propia.",
+  "muestra_json": {
+    "codigo": "dolar",
+    "nombre": "Dólar observado",
+    "unidad_medida": "Pesos",
+    "serie": [
+      {
+        "fecha": "2026-11-20T03:00:00.000Z",
+        "valor": 1008.79
+      }
+    ]
+  }
+}

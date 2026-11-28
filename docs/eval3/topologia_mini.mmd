@@ -1,0 +1,13 @@
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Arial, Helvetica, sans-serif", "fontSize": "16px", "primaryColor": "#e6f0fc", "primaryBorderColor": "#2a78d6", "primaryTextColor": "#0b0b0b", "lineColor": "#52514e"}, "flowchart": {"curve": "basis", "nodeSpacing": 22, "rankSpacing": 34}}}%%
+flowchart LR
+    I(["09:00<br/>Inicio"]):::evento --> S1["1 · Login<br/>TestFire"]
+    S1 --> S2["2 · Extracción<br/>+ API dólar"]
+    S2 --> S3["3 · Excel<br/>Monto CLP"]
+    S3 --> S4a["4a · Dispatcher<br/>encola correos"]
+    S4a --> Q[("Cola<br/>SQLite")]:::datos
+    Q --> S4b["4b · Performer<br/>envía y sigue<br/>ante errores"]
+    S4b --> S4c["4c · Recepción<br/>clasifica"]
+    S4c --> S5["5 · Mejora<br/>tracker + logs"]
+    S5 --> F(["Fin"]):::evento
+    classDef evento fill:#2a78d6,stroke:#2a78d6,color:#ffffff
+    classDef datos fill:#e3f6ee,stroke:#199e70,color:#0b0b0b

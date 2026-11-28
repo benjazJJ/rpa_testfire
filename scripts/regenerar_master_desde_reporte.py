@@ -47,6 +47,12 @@ def _reporte_mas_reciente(carpeta: Path) -> Path:
         carpeta.glob("movimientos_*.xlsx"), key=lambda p: p.stat().st_mtime
     )
     if not candidatos:
+        # Evaluación 3: la extracción de Rocketbot queda en Rocketbot_Salida/consolidado.xlsx.
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from src.rutas import carpeta_salida
+        consolidado = carpeta_salida() / "consolidado.xlsx"
+        if consolidado.exists():
+            return consolidado
         raise FileNotFoundError(
             f"No hay reportes movimientos_*.xlsx en {carpeta}. "
             "Corre primero main.py o indica uno con --reporte."
@@ -57,11 +63,34 @@ def _reporte_mas_reciente(carpeta: Path) -> Path:
 def _leer_movimientos(reporte: Path) -> list[list]:
     libro = load_workbook(reporte, data_only=True, read_only=True)
     try:
-        if "Movimientos" not in libro.sheetnames:
-            raise ValueError(f"El reporte {reporte.name} no tiene la hoja 'Movimientos'.")
-        filas = list(libro["Movimientos"].iter_rows(values_only=True))
+        if "Movimientos" in libro.sheetnames:
+            filas = list(libro["Movimientos"].iter_rows(values_only=True))
+        else:
+            filas = list(libro.active.iter_rows(max_col=5, values_only=True))
     finally:
         libro.close()
+
+    # consolidado.xlsx de Rocketbot: encabezados de TestFire en inglés; sin IDs repetidos.
+    if filas and str(filas[0][0] or "").strip().casefold() == "transaction id":
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from src.conciliacion import ConciliadorMovimientos
+        normalizador = ConciliadorMovimientos()
+        claves = ("id_transaccion", "fecha_hora", "id_cuenta", "accion", "monto")
+        datos, vistos = [], set()
+        for f in filas[1:]:
+            if not f or all(v in (None, "") for v in f):
+                continue
+            try:
+                m = normalizador._normalizar_movimiento(dict(zip(claves, f[:5])))  # noqa: SLF001
+            except ValueError:
+                continue  # fila ilegible del sitio: no entra al maestro
+            if m["id_transaccion"] in vistos:
+                continue
+            vistos.add(m["id_transaccion"])
+            datos.append([m["id_transaccion"], m["fecha_hora"], m["id_cuenta"], m["accion"], float(m["monto"])])
+        if not datos:
+            raise ValueError("El consolidado no contiene movimientos.")
+        return datos
 
     if [str(c).strip() if c else "" for c in filas[0][:5]] != ENCABEZADOS:
         raise ValueError("La hoja 'Movimientos' no tiene los encabezados esperados.")

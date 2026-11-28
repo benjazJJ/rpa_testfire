@@ -1,0 +1,4 @@
+# Lo mínimo para los robots de la Evaluación 3 (encolador y procesador).
+openpyxl
+requests
+psycopg[binary]
