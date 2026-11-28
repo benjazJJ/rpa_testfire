@@ -1,6 +1,6 @@
 # RPA TestFire
 
-Automatización de la conciliación de movimientos bancarios con **Rocketbot y Python**. Dos robots trabajan sobre los datos ficticios de Altoro Mutual, comparan los movimientos con un maestro interno y preparan un reporte Excel para que una persona revise las diferencias.
+Automatización de la conciliación de movimientos bancarios con **Rocketbot y Python**. El Encolador extrae los datos ficticios de Altoro Mutual y ejecuta los scripts de Python que concilian los movimientos y generan el reporte Excel. El Procesador recibe los casos mediante una cola compartida en **PostgreSQL alojado en Neon** y coordina los avisos para revisión humana.
 
 Proyecto académico de **Benjamín Palma y Gustavo Espinoza**. Ambos desarrollaron juntos el flujo completo para la asignatura Automatización de Procesos Robóticos I de Duoc UC.
 
@@ -8,13 +8,13 @@ Proyecto académico de **Benjamín Palma y Gustavo Espinoza**. Ambos desarrollar
 
 | Robot | Responsabilidad |
 | --- | --- |
-| **Encolador** | Extrae los movimientos del banco de demostración, valida los datos y los concilia con el maestro local. Consulta el dólar observado para convertir los montos a CLP, genera el reporte Excel y encola los avisos con su adjunto. |
+| **Encolador** | Extrae los movimientos del banco de demostración y valida la extracción. Ejecuta los scripts de Python para conciliar con el maestro local, consultar el dólar observado y generar el reporte Excel con los montos en CLP. Encola los avisos con su adjunto en Neon. |
 | **Procesador** | Toma los casos de la cola compartida, envía los avisos y prepara un resumen para el supervisor. Lee las respuestas por IMAP y registra la decisión como `APROBADO`, `RECHAZADO` o `REVISAR`. |
 
 ```mermaid
 flowchart LR
     A["Altoro Mutual · Datos ficticios"] --> B["Encolador · Rocketbot"]
-    B --> C["Cola compartida · PostgreSQL"]
+    B --> C["Neon · Cola PostgreSQL"]
     C --> D["Procesador · Rocketbot"]
     D --> E["Revisión humana"]
     E -.->|Respuesta| D
@@ -22,7 +22,9 @@ flowchart LR
     D -.-> F
 ```
 
-Los robots pueden ejecutarse en equipos distintos. La cola PostgreSQL, alojada en Neon en la evaluación, comparte los casos y sus adjuntos. El sistema evita volver a encolar el mismo caso, reintenta fallos temporales y continúa procesando los demás cuando un envío falla. Las respuestas ambiguas quedan pendientes de revisión humana.
+### Base de datos en Neon
+
+Ambos robots usan la misma base **PostgreSQL en Neon** para guardar los casos, sus estados y los adjuntos. El Procesador puede recuperar el Excel desde otro equipo. El sistema evita volver a encolar el mismo caso, reintenta fallos temporales y continúa procesando los demás cuando un envío falla. Las respuestas ambiguas quedan pendientes de revisión humana.
 
 ## Probar la cola en simulación
 
